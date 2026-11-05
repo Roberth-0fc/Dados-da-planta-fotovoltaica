@@ -100,6 +100,16 @@ def aplicar_estilo_interface(tema_visual: str):
     }}
     [data-testid="stHeader"] {{ background: transparent !important; }}
     [data-testid="stToolbar"] {{ background: transparent !important; }}
+
+    /* O tema é controlado exclusivamente pelo seletor da barra lateral.
+       Esconde o menu nativo (⋮) do Streamlit, que também oferece a troca
+       de tema e poderia competir com as paletas personalizadas do dashboard.
+       Os demais controles da barra superior, como compartilhar, permanecem. */
+    [data-testid="stMainMenu"],
+    #MainMenu {{
+        display: none !important;
+        visibility: hidden !important;
+    }}
     .block-container {{
         max-width: 1660px;
         padding-top: 1.35rem;
