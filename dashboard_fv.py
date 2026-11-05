@@ -29,6 +29,14 @@ def aplicar_estilo_interface(tema_visual: str):
             "chart_plot": "#F0F5EE",
             "chart_text": "#30483A",
             "chart_hover": "#FFFFFF",
+            "hero_bg": "linear-gradient(120deg, #DCEBDD 0%, #D6EAE3 54%, #F1EBCF 100%)",
+            "hero_text": "#243B30",
+            "hero_sub": "rgba(36, 59, 48, 0.82)",
+            "hero_kicker_text": "#3D702F",
+            "hero_kicker_bg": "rgba(255, 255, 255, 0.48)",
+            "hero_orb": "rgba(80, 145, 70, 0.34)",
+            "hero_sun": "#88A92B",
+            "color_scheme": "light",
         }
     else:
         paleta = {
@@ -49,11 +57,20 @@ def aplicar_estilo_interface(tema_visual: str):
             "chart_plot": "#1D3027",
             "chart_text": "#EAF3EB",
             "chart_hover": "#30473A",
+            "hero_bg": "radial-gradient(circle at 86% 18%, rgba(215, 236, 85, 0.22), transparent 23%), radial-gradient(circle at 72% 110%, rgba(57, 197, 138, 0.22), transparent 34%), linear-gradient(115deg, #173D30 0%, #1D5642 48%, #264B3A 100%)",
+            "hero_text": "#FFFFFF",
+            "hero_sub": "rgba(244, 250, 242, 0.82)",
+            "hero_kicker_text": "#E4F58C",
+            "hero_kicker_bg": "rgba(8, 25, 18, 0.22)",
+            "hero_orb": "rgba(229, 247, 124, 0.42)",
+            "hero_sun": "#E9F77B",
+            "color_scheme": "dark",
         }
 
     st.markdown(f"""
     <style>
     :root {{
+        color-scheme: {paleta['color_scheme']};
         --fv-app-bg: {paleta['app_bg']};
         --fv-sidebar-bg: {paleta['sidebar_bg']};
         --fv-panel: {paleta['panel']};
@@ -66,9 +83,18 @@ def aplicar_estilo_interface(tema_visual: str):
         --fv-accent-2: {paleta['accent_2']};
         --fv-blue: {paleta['blue']};
         --fv-shadow: {paleta['shadow']};
+        --fv-hero-bg: {paleta['hero_bg']};
+        --fv-hero-text: {paleta['hero_text']};
+        --fv-hero-sub: {paleta['hero_sub']};
+        --fv-hero-kicker-text: {paleta['hero_kicker_text']};
+        --fv-hero-kicker-bg: {paleta['hero_kicker_bg']};
+        --fv-hero-orb: {paleta['hero_orb']};
+        --fv-hero-sun: {paleta['hero_sun']};
     }}
 
-    html, body, [data-testid="stAppViewContainer"], .stApp {{
+    html, body, .stApp, [data-testid="stApp"],
+    [data-testid="stAppViewContainer"], [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"], section.main {{
         background: var(--fv-app-bg) !important;
         color: var(--fv-text) !important;
     }}
@@ -84,9 +110,16 @@ def aplicar_estilo_interface(tema_visual: str):
         border-right: 1px solid var(--fv-border);
     }}
     [data-testid="stSidebar"] > div:first-child {{ background: transparent !important; }}
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {{ color: var(--fv-text) !important; }}
 
-    h1, h2, h3, h4, p, label, span, div {{
+    h1, h2, h3, h4, p {{
         text-wrap: pretty;
+    }}
+    /* Keep compact controls and numeric badges on one line. */
+    label, span, div {{
+        overflow-wrap: normal;
+        word-break: normal;
     }}
     h1, h2, h3, h4 {{ color: var(--fv-text) !important; }}
     h2 {{
@@ -95,7 +128,9 @@ def aplicar_estilo_interface(tema_visual: str):
         margin-top: 1rem;
     }}
     h3 {{ color: var(--fv-accent-2) !important; }}
-    [data-testid="stCaptionContainer"] {{ color: var(--fv-muted) !important; }}
+    [data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"] p {{ color: var(--fv-muted) !important; }}
+    [data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] li {{ color: var(--fv-text); }}
     hr {{ border-color: var(--fv-border) !important; }}
 
     /* Cartões e indicadores */
@@ -129,12 +164,24 @@ def aplicar_estilo_interface(tema_visual: str):
     [data-baseweb="select"] > div,
     [data-baseweb="input"] > div,
     [data-baseweb="textarea"] > div,
+    [data-testid="stDateInput"] input,
+    [data-testid="stTextInput"] input,
     input, textarea {{
         background: var(--fv-panel) !important;
         color: var(--fv-text) !important;
         border-color: var(--fv-border) !important;
         border-radius: 10px !important;
     }}
+    [data-baseweb="select"] span, [data-baseweb="select"] input,
+    [data-baseweb="select"] svg {{ color: var(--fv-text) !important; fill: var(--fv-text) !important; }}
+    [data-baseweb="popover"], [data-baseweb="menu"],
+    [data-baseweb="popover"] ul {{
+        background: var(--fv-panel) !important;
+        color: var(--fv-text) !important;
+        border-color: var(--fv-border) !important;
+    }}
+    [role="option"] {{ background: var(--fv-panel) !important; color: var(--fv-text) !important; }}
+    [role="option"]:hover {{ background: var(--fv-panel-hover) !important; }}
     [data-baseweb="tag"] {{
         background: var(--fv-accent-2) !important;
         color: #FFFFFF !important;
@@ -181,9 +228,31 @@ def aplicar_estilo_interface(tema_visual: str):
         background: var(--fv-panel);
         border: 1px solid var(--fv-border);
         border-radius: 16px;
-        padding: 7px 8px 2px 8px;
+        padding: 9px 10px 4px 10px;
         box-shadow: 0 7px 20px var(--fv-shadow);
     }}
+    /* Plotly toolbar remains visible even when the pointer is away from the chart. */
+    [data-testid="stPlotlyChart"] .modebar-container {{
+        display: block !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        top: 7px !important;
+        right: 9px !important;
+        z-index: 20 !important;
+    }}
+    [data-testid="stPlotlyChart"] .modebar {{
+        opacity: 1 !important;
+        visibility: visible !important;
+        background: var(--fv-panel-alt) !important;
+        border: 1px solid var(--fv-border) !important;
+        border-radius: 10px !important;
+        padding: 4px 6px !important;
+        box-shadow: 0 3px 10px var(--fv-shadow) !important;
+    }}
+    [data-testid="stPlotlyChart"] .modebar-btn {{ opacity: 1 !important; color: var(--fv-text) !important; }}
+    [data-testid="stPlotlyChart"] .modebar-btn svg,
+    [data-testid="stPlotlyChart"] .modebar-btn path {{ fill: var(--fv-text) !important; }}
+    [data-testid="stPlotlyChart"] .modebar-btn:hover {{ background: var(--fv-panel-hover) !important; }}
 
     /* Cabeçalho principal */
     .fv-hero {{
@@ -193,10 +262,7 @@ def aplicar_estilo_interface(tema_visual: str):
         margin: 0 0 22px 0;
         border: 1px solid var(--fv-border);
         border-radius: 22px;
-        background:
-            radial-gradient(circle at 86% 18%, rgba(215, 236, 85, 0.22), transparent 23%),
-            radial-gradient(circle at 72% 110%, rgba(57, 197, 138, 0.22), transparent 34%),
-            linear-gradient(115deg, #173D30 0%, #1D5642 48%, #264B3A 100%);
+        background: var(--fv-hero-bg);
         box-shadow: 0 12px 30px var(--fv-shadow);
         color: #F4FAF2;
     }}
@@ -208,15 +274,15 @@ def aplicar_estilo_interface(tema_visual: str):
         margin-bottom: 9px;
         border: 1px solid rgba(231, 248, 187, 0.32);
         border-radius: 30px;
-        background: rgba(8, 25, 18, 0.22);
-        color: #E4F58C;
+        background: var(--fv-hero-kicker-bg);
+        color: var(--fv-hero-kicker-text);
         font-size: 0.76rem;
         font-weight: 750;
         letter-spacing: 0.08em;
     }}
     .fv-hero h1 {{
         margin: 0 !important;
-        color: #FFFFFF !important;
+        color: var(--fv-hero-text) !important;
         font-size: clamp(1.7rem, 3vw, 2.45rem) !important;
         line-height: 1.12;
         letter-spacing: -0.035em;
@@ -224,7 +290,7 @@ def aplicar_estilo_interface(tema_visual: str):
     .fv-hero p {{
         max-width: 780px;
         margin: 9px 0 0 0;
-        color: rgba(244, 250, 242, 0.82) !important;
+        color: var(--fv-hero-sub) !important;
         font-size: 1rem;
     }}
     .fv-hero-orb {{
@@ -233,7 +299,7 @@ def aplicar_estilo_interface(tema_visual: str):
         top: 13%;
         width: 118px;
         height: 118px;
-        border: 1px solid rgba(229, 247, 124, 0.42);
+        border: 1px solid var(--fv-hero-orb);
         border-radius: 50%;
         box-shadow: 0 0 0 13px rgba(229, 247, 124, 0.055), 0 0 0 27px rgba(229, 247, 124, 0.035);
     }}
@@ -243,7 +309,7 @@ def aplicar_estilo_interface(tema_visual: str):
         inset: 0;
         display: grid;
         place-items: center;
-        color: #E9F77B;
+        color: var(--fv-hero-sun);
         font-size: 3.8rem;
         opacity: 0.9;
     }}
@@ -280,9 +346,32 @@ def aplicar_estilo_interface(tema_visual: str):
         margin: 8px 0 15px 0;
         color: var(--fv-text);
     }}
-    .temperature-icon {{ font-size: 2.25rem; line-height: 1.2; }}
-    .temperature-main {{ color: var(--fv-text); font-size: 1.42rem; font-weight: 780; margin-top: 2px; }}
-    .temperature-sub {{ color: var(--fv-muted); font-size: 0.88rem; }}
+    .temperature-icon {{ font-size: 2.05rem; line-height: 1.2; }}
+    .temperature-main {{ color: var(--fv-text); font-size: 1.28rem; font-weight: 780; margin-top: 3px; line-height: 1.35; }}
+    .temperature-sub {{ color: var(--fv-muted); font-size: 0.86rem; }}
+    .thermal-context {{
+        padding: 13px 15px;
+        margin-top: 9px;
+        border-radius: 15px;
+        background: linear-gradient(105deg, rgba(72, 157, 191, 0.15), rgba(61, 177, 126, 0.12), rgba(228, 183, 75, 0.14));
+        border: 1px solid var(--fv-border);
+    }}
+    .sensitivity-badge {{
+        margin-top: 26px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: linear-gradient(120deg, var(--fv-panel-alt), var(--fv-panel-hover));
+        border: 1px solid var(--fv-border);
+        color: var(--fv-accent-2);
+        text-align: center;
+        font-size: 1.05rem;
+        font-weight: 800;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px var(--fv-shadow);
+    }}
+    [data-testid="stSlider"] [role="slider"] {{
+        border-color: var(--fv-accent-2) !important;
+    }}
 
     @media (max-width: 760px) {{
         .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
@@ -311,7 +400,7 @@ def exibir_grafico(fig):
         title_font=dict(color=texto, size=16),
         legend=dict(font=dict(color=texto), bgcolor="rgba(0,0,0,0)"),
         hoverlabel=dict(bgcolor=hover, font=dict(color=texto)),
-        margin=dict(l=18, r=18, t=48, b=18),
+        margin=dict(l=18, r=18, t=72, b=24),
     )
     fig.update_xaxes(
         gridcolor=grade,
@@ -327,7 +416,16 @@ def exibir_grafico(fig):
         tickfont=dict(color=texto),
         title_font=dict(color=texto),
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "responsive": True})
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={
+            "displayModeBar": True,
+            "displaylogo": False,
+            "responsive": True,
+            "modeBarButtonsToRemove": ["select2d", "lasso2d"],
+        },
+    )
 
 @st.cache_data(show_spinner=False)
 def load_and_clean_data(file_bytes: bytes, file_name: str):
@@ -456,6 +554,85 @@ def criar_grafico_base(df, x_col, y_col, titulo, tipo_grafico, cor='#2980B9'):
     fig.update_layout(hovermode="x unified", margin=dict(l=15, r=15, t=35, b=15))
     return fig
 
+
+def exibir_condicoes_termicas(df, variavel_y, irrad_col):
+    """Mostra o contexto térmico ao lado dos indicadores gerais quando a variável é temperatura."""
+    st.markdown(f"### 🌡️ Condições térmicas — {variavel_y}")
+    st.caption(
+        "Os símbolos de sol e nuvens representam as condições de irradiância medidas pela própria planta; "
+        "não são uma previsão meteorológica."
+    )
+
+    dias_temperatura = sorted(df['Dia_Data'].dropna().unique())
+    if not dias_temperatura:
+        st.info("Não há datas disponíveis para contextualizar a temperatura.")
+        return
+
+    with st.container(border=True):
+        dia_temperatura = st.selectbox(
+            "Dia para contextualizar a temperatura:",
+            options=dias_temperatura,
+            index=len(dias_temperatura) - 1,
+            format_func=lambda d: d.strftime('%d/%m/%Y'),
+            key="dia_contexto_temperatura_topo"
+        )
+
+        df_temp_contexto = df[df['Dia_Data'] == dia_temperatura]
+        serie_temp = df_temp_contexto[variavel_y].dropna()
+        media_temp = serie_temp.mean() if not serie_temp.empty else None
+        maxima_temp = serie_temp.max() if not serie_temp.empty else None
+
+        irradiancia_media_dia = None
+        if irrad_col:
+            serie_irrad_luz = df_temp_contexto.loc[df_temp_contexto[irrad_col] >= 100, irrad_col].dropna()
+            if not serie_irrad_luz.empty:
+                irradiancia_media_dia = serie_irrad_luz.mean()
+
+        if irradiancia_media_dia is not None:
+            if irradiancia_media_dia >= 600:
+                icone_ceu = "☀️"
+                texto_ceu = "Irradiância elevada durante os períodos de luz"
+            elif irradiancia_media_dia >= 250:
+                icone_ceu = "⛅"
+                texto_ceu = "Irradiância intermediária durante os períodos de luz"
+            else:
+                icone_ceu = "☁️"
+                texto_ceu = "Irradiância reduzida durante os períodos de luz"
+            texto_irrad = f"Irradiância média com luz: {irradiancia_media_dia:.1f} W/m²"
+        else:
+            icone_ceu = "🌤️"
+            texto_ceu = "Sem irradiância suficiente para caracterizar visualmente o céu"
+            texto_irrad = "Irradiância não disponível neste dia"
+
+        t1, t2 = st.columns(2)
+        with t1:
+            valor_media = f"{media_temp:.1f} °C" if media_temp is not None else "N/D"
+            st.markdown(
+                f'<div class="temperature-panel"><div class="temperature-icon">🌡️</div>'
+                f'<div class="temperature-sub">Temperatura média</div>'
+                f'<div class="temperature-main">{valor_media}</div>'
+                f'<div class="temperature-sub">{variavel_y}</div></div>',
+                unsafe_allow_html=True
+            )
+        with t2:
+            valor_max = f"{maxima_temp:.1f} °C" if maxima_temp is not None else "N/D"
+            st.markdown(
+                f'<div class="temperature-panel"><div class="temperature-icon">🔥</div>'
+                f'<div class="temperature-sub">Temperatura máxima</div>'
+                f'<div class="temperature-main">{valor_max}</div>'
+                f'<div class="temperature-sub">{dia_temperatura.strftime("%d/%m/%Y")}</div></div>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown(
+            f'<div class="thermal-context"><div class="temperature-icon">{icone_ceu}</div>'
+            f'<div class="temperature-sub">Contexto de irradiância</div>'
+            f'<div class="temperature-main">{texto_ceu}</div>'
+            f'<div class="temperature-sub">{texto_irrad}</div></div>',
+            unsafe_allow_html=True
+        )
+
+
 def main():
     # --- BARRA LATERAL ---
     st.sidebar.header("☀️ Central Solar")
@@ -510,13 +687,13 @@ def main():
             else:
                 st.success("✅ **Qualidade dos Dados:** Planilha 100% preenchida (sem células em branco).")
 
-            # --- INDICADORES GERAIS COM DATAS DOS PICOS ---
-            st.markdown("### 📊 Indicadores Gerais do Período")
+            # --- INDICADORES GERAIS + PAINEL TÉRMICO LATERAL ---
             potencia_col = next((c for c in var_cols if 'power' in c.lower() or 'potência' in c.lower() or 'potencia' in c.lower()), None)
             temp_mod_col = next((c for c in var_cols if 'temp' in c.lower() and ('mod' in c.lower() or 'fv' in c.lower())), None)
             irrad_col = next((c for c in var_cols if 'piranometro' in c.lower() or 'irradiância' in c.lower() or 'g' == c.lower() or 'irrad' in c.lower()), None)
-            
-            # Busca da data exata em que ocorreu o valor máximo
+            variavel_temperatura = ('temp' in str(variavel_y).lower() or 'temperatura' in str(variavel_y).lower())
+
+            # Busca a data exata em que ocorreu o valor máximo.
             def obter_data_maxima(col_nome):
                 if col_nome and not df[col_nome].dropna().empty:
                     idx_max = df[col_nome].idxmax()
@@ -527,23 +704,49 @@ def main():
             data_temp_max = obter_data_maxima(temp_mod_col)
             data_irrad_max = obter_data_maxima(irrad_col)
 
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                with st.container(border=True):
-                    val_p = f"{df[potencia_col].max():.2f} W" if potencia_col else "N/A"
-                    st.metric("Potência Máxima", val_p, delta=f"📅 {data_pot_max}", delta_color="off")
-            with c2:
-                with st.container(border=True):
-                    val_e = f"{(df[potencia_col].sum() * 0.25) / 1000:.2f} kWh" if potencia_col else "N/A"
-                    st.metric("Energia Estimada Total", val_e)
-            with c3:
-                with st.container(border=True):
-                    val_t = f"{df[temp_mod_col].max():.1f} °C" if temp_mod_col else "N/A"
-                    st.metric("Temp. Máxima Módulo", val_t, delta=f"📅 {data_temp_max}", delta_color="off")
-            with c4:
-                with st.container(border=True):
-                    val_i = f"{df[irrad_col].max():.1f} W/m²" if irrad_col else "N/A"
-                    st.metric("Irradiância Máxima", val_i, delta=f"📅 {data_irrad_max}", delta_color="off")
+            if variavel_temperatura:
+                indicadores_col, termico_col = st.columns([1.05, 0.95], gap="large")
+                with indicadores_col:
+                    st.markdown("### 📊 Indicadores gerais da planta")
+                    k1, k2 = st.columns(2)
+                    with k1:
+                        with st.container(border=True):
+                            val_p = f"{df[potencia_col].max():.2f} W" if potencia_col else "N/A"
+                            st.metric("Potência Máxima", val_p, delta=f"📅 {data_pot_max}", delta_color="off")
+                    with k2:
+                        with st.container(border=True):
+                            val_e = f"{(df[potencia_col].sum() * 0.25) / 1000:.2f} kWh" if potencia_col else "N/A"
+                            st.metric("Energia Estimada Total", val_e)
+                    k3, k4 = st.columns(2)
+                    with k3:
+                        with st.container(border=True):
+                            val_t = f"{df[temp_mod_col].max():.1f} °C" if temp_mod_col else "N/A"
+                            st.metric("Temp. Máxima Módulo", val_t, delta=f"📅 {data_temp_max}", delta_color="off")
+                    with k4:
+                        with st.container(border=True):
+                            val_i = f"{df[irrad_col].max():.1f} W/m²" if irrad_col else "N/A"
+                            st.metric("Irradiância Máxima", val_i, delta=f"📅 {data_irrad_max}", delta_color="off")
+                with termico_col:
+                    exibir_condicoes_termicas(df, variavel_y, irrad_col)
+            else:
+                st.markdown("### 📊 Indicadores gerais do período")
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    with st.container(border=True):
+                        val_p = f"{df[potencia_col].max():.2f} W" if potencia_col else "N/A"
+                        st.metric("Potência Máxima", val_p, delta=f"📅 {data_pot_max}", delta_color="off")
+                with c2:
+                    with st.container(border=True):
+                        val_e = f"{(df[potencia_col].sum() * 0.25) / 1000:.2f} kWh" if potencia_col else "N/A"
+                        st.metric("Energia Estimada Total", val_e)
+                with c3:
+                    with st.container(border=True):
+                        val_t = f"{df[temp_mod_col].max():.1f} °C" if temp_mod_col else "N/A"
+                        st.metric("Temp. Máxima Módulo", val_t, delta=f"📅 {data_temp_max}", delta_color="off")
+                with c4:
+                    with st.container(border=True):
+                        val_i = f"{df[irrad_col].max():.1f} W/m²" if irrad_col else "N/A"
+                        st.metric("Irradiância Máxima", val_i, delta=f"📅 {data_irrad_max}", delta_color="off")
 
             # --- DESTAQUES DE PERFORMANCE ---
             st.markdown(f"### 🏆 Destaques de Maior Valor para: `{variavel_y}`")
@@ -912,15 +1115,22 @@ def main():
             )
 
             if potencia_col:
-                limite_amostras = st.slider(
-                    "Sensibilidade para sinalizar desempenho abaixo da referência:",
-                    min_value=10,
-                    max_value=50,
-                    value=20,
-                    step=5,
-                    format="%d%%",
-                    help="É um critério indicativo: sinaliza dias cujo indicador energia/irradiação ficou abaixo da mediana de referência por esta porcentagem."
-                )
+                slider_col, valor_col = st.columns([5, 1])
+                with slider_col:
+                    limite_amostras = st.slider(
+                        "Sensibilidade para sinalizar desempenho abaixo da referência:",
+                        min_value=10,
+                        max_value=50,
+                        value=20,
+                        step=5,
+                        format="%d",
+                        help="É um critério indicativo: sinaliza dias cujo indicador energia/irradiação ficou abaixo da mediana de referência por esta porcentagem."
+                    )
+                with valor_col:
+                    st.markdown(
+                        f'<div class="sensitivity-badge">{limite_amostras}%</div>',
+                        unsafe_allow_html=True
+                    )
 
                 df_anomalia_base = df.dropna(subset=[potencia_col]).copy()
                 df_anomalia_base['_Energia_Intervalo_kWh'] = df_anomalia_base[potencia_col] * 0.25 / 1000
@@ -1058,79 +1268,6 @@ def main():
                     "Não encontrei uma coluna identificável como potência. Para calcular energia diária "
                     "e procurar dias com baixa geração, inclua uma coluna cujo nome contenha 'Power' ou 'Potência'."
                 )
-
-            # --- CONTEXTO VISUAL PARA VARIÁVEIS DE TEMPERATURA ---
-            if 'temp' in str(variavel_y).lower() or 'temperatura' in str(variavel_y).lower():
-                st.divider()
-                st.markdown(f"## 🌡️ Condições térmicas — {variavel_y}")
-                st.caption(
-                    "Os símbolos de sol e nuvens são uma representação visual baseada na irradiância "
-                    "medida pela própria planta; não são uma previsão meteorológica."
-                )
-                dias_temperatura = sorted(df['Dia_Data'].dropna().unique())
-                dia_temperatura = st.selectbox(
-                    "Dia para contextualizar a temperatura:",
-                    options=dias_temperatura,
-                    index=len(dias_temperatura) - 1 if dias_temperatura else 0,
-                    format_func=lambda d: d.strftime('%d/%m/%Y'),
-                    key="dia_contexto_temperatura"
-                )
-                df_temp_contexto = df[df['Dia_Data'] == dia_temperatura]
-                serie_temp = df_temp_contexto[variavel_y].dropna()
-                media_temp = serie_temp.mean() if not serie_temp.empty else None
-                maxima_temp = serie_temp.max() if not serie_temp.empty else None
-
-                irradiancia_media_dia = None
-                if irrad_col:
-                    # Calcula a média apenas nos intervalos em que há irradiância relevante,
-                    # evitando que o período noturno reduza artificialmente a média do dia.
-                    serie_irrad_luz = df_temp_contexto.loc[df_temp_contexto[irrad_col] >= 100, irrad_col].dropna()
-                    if not serie_irrad_luz.empty:
-                        irradiancia_media_dia = serie_irrad_luz.mean()
-
-                if irradiancia_media_dia is not None:
-                    if irradiancia_media_dia >= 600:
-                        icone_ceu = "☀️"
-                        texto_ceu = "Irradiância elevada durante os períodos de luz"
-                    elif irradiancia_media_dia >= 250:
-                        icone_ceu = "⛅"
-                        texto_ceu = "Irradiância intermediária durante os períodos de luz"
-                    else:
-                        icone_ceu = "☁️"
-                        texto_ceu = "Irradiância reduzida durante os períodos de luz"
-                    texto_irrad = f"Irradiância média com luz: {irradiancia_media_dia:.1f} W/m²"
-                else:
-                    icone_ceu = "🌤️"
-                    texto_ceu = "Sem irradiância suficiente para caracterizar visualmente o céu"
-                    texto_irrad = "Irradiância não disponível neste dia"
-
-                tc1, tc2, tc3 = st.columns(3)
-                with tc1:
-                    valor_media_temp = f"{media_temp:.1f} °C" if media_temp is not None else "N/D"
-                    st.markdown(
-                        f'<div class="temperature-panel"><div class="temperature-icon">🌡️</div>'
-                        f'<div class="temperature-sub">Temperatura média</div>'
-                        f'<div class="temperature-main">{valor_media_temp}</div>'
-                        f'<div class="temperature-sub">{variavel_y}</div></div>',
-                        unsafe_allow_html=True
-                    )
-                with tc2:
-                    valor_max_temp = f"{maxima_temp:.1f} °C" if maxima_temp is not None else "N/D"
-                    st.markdown(
-                        f'<div class="temperature-panel"><div class="temperature-icon">🔥</div>'
-                        f'<div class="temperature-sub">Temperatura máxima</div>'
-                        f'<div class="temperature-main">{valor_max_temp}</div>'
-                        f'<div class="temperature-sub">{dia_temperatura.strftime("%d/%m/%Y")}</div></div>',
-                        unsafe_allow_html=True
-                    )
-                with tc3:
-                    st.markdown(
-                        f'<div class="temperature-panel"><div class="temperature-icon">{icone_ceu}</div>'
-                        f'<div class="temperature-sub">Contexto de irradiância</div>'
-                        f'<div class="temperature-main">{texto_ceu}</div>'
-                        f'<div class="temperature-sub">{texto_irrad}</div></div>',
-                        unsafe_allow_html=True
-                    )
 
             # --- EXPANDER PARA INSPEÇÃO DA PLANILHA ---
             with st.expander("🔍 Inspecionar Tabela Completa e Dados Brutos"):
