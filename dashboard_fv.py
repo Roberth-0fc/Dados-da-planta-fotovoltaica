@@ -71,6 +71,11 @@ def aplicar_estilo_interface(tema_visual: str):
     <style>
     :root {{
         color-scheme: {paleta['color_scheme']};
+        /* Sincroniza também as variáveis nativas do Streamlit com a paleta escolhida. */
+        --background-color: {paleta['app_bg']};
+        --secondary-background-color: {paleta['panel']};
+        --text-color: {paleta['text']};
+        --primary-color: {paleta['accent_2']};
         --fv-app-bg: {paleta['app_bg']};
         --fv-sidebar-bg: {paleta['sidebar_bg']};
         --fv-panel: {paleta['panel']};
@@ -97,9 +102,20 @@ def aplicar_estilo_interface(tema_visual: str):
     [data-testid="stMainBlockContainer"], section.main {{
         background: var(--fv-app-bg) !important;
         color: var(--fv-text) !important;
+        /* Mantém os componentes nativos sincronizados com o seletor do painel. */
+        --background-color: var(--fv-app-bg) !important;
+        --secondary-background-color: var(--fv-panel) !important;
+        --text-color: var(--fv-text) !important;
+        --primary-color: var(--fv-accent-2) !important;
     }}
-    [data-testid="stHeader"] {{ background: transparent !important; }}
-    [data-testid="stToolbar"] {{ background: transparent !important; }}
+    /* Evita que áreas auxiliares mantenham o fundo escuro do tema nativo. */
+    [data-testid="stBottom"], [data-testid="stBottomBlockContainer"],
+    [data-testid="stStatusWidget"], footer {{
+        background: var(--fv-app-bg) !important;
+        color: var(--fv-text) !important;
+    }}
+    [data-testid="stHeader"], [data-testid="stToolbar"],
+    [data-testid="stDecoration"] {{ background: transparent !important; }}
 
     /* O tema é controlado exclusivamente pelo seletor da barra lateral.
        Esconde o menu nativo (⋮) do Streamlit, que também oferece a troca
@@ -184,7 +200,8 @@ def aplicar_estilo_interface(tema_visual: str):
     }}
     [data-baseweb="select"] span, [data-baseweb="select"] input,
     [data-baseweb="select"] svg {{ color: var(--fv-text) !important; fill: var(--fv-text) !important; }}
-    [data-baseweb="popover"], [data-baseweb="menu"],
+    [data-baseweb="popover"], [data-baseweb="popover"] > div,
+    [data-baseweb="menu"], [data-baseweb="menu"] ul,
     [data-baseweb="popover"] ul {{
         background: var(--fv-panel) !important;
         color: var(--fv-text) !important;
@@ -192,6 +209,9 @@ def aplicar_estilo_interface(tema_visual: str):
     }}
     [role="option"] {{ background: var(--fv-panel) !important; color: var(--fv-text) !important; }}
     [role="option"]:hover {{ background: var(--fv-panel-hover) !important; }}
+    [data-testid="stRadio"] label, [data-testid="stCheckbox"] label,
+    [data-testid="stToggle"] label {{ color: var(--fv-text) !important; }}
+    [data-testid="stRadio"] input, [data-testid="stCheckbox"] input {{ accent-color: var(--fv-accent-2) !important; }}
     [data-baseweb="tag"] {{
         background: var(--fv-accent-2) !important;
         color: #FFFFFF !important;
@@ -224,15 +244,51 @@ def aplicar_estilo_interface(tema_visual: str):
         border-bottom: 3px solid var(--fv-accent-2) !important;
     }}
     [data-testid="stDataFrame"], [data-testid="stTable"] {{
+        background: var(--fv-panel) !important;
+        color: var(--fv-text) !important;
         border: 1px solid var(--fv-border);
         border-radius: 12px;
         overflow: hidden;
     }}
+    /* st.dataframe usa Glide Data Grid; estas variáveis corrigem o tema da grade
+       mesmo quando o navegador ou o Streamlit estão configurados no modo escuro. */
+    [data-testid="stDataFrame"] {{
+        --gdg-bg-cell: var(--fv-panel);
+        --gdg-bg-cell-medium: var(--fv-panel-alt);
+        --gdg-bg-header: var(--fv-panel-alt);
+        --gdg-bg-header-has: var(--fv-panel-hover);
+        --gdg-bg-header-hovered: var(--fv-panel-hover);
+        --gdg-bg-bubble: var(--fv-panel-alt);
+        --gdg-bg-bubble-selected: var(--fv-panel-hover);
+        --gdg-text-dark: var(--fv-text);
+        --gdg-text-medium: var(--fv-muted);
+        --gdg-text-light: var(--fv-muted);
+        --gdg-text-header: var(--fv-text);
+        --gdg-text-group-header: var(--fv-text);
+        --gdg-text-bubble: var(--fv-text);
+        --gdg-border-color: var(--fv-border);
+        --gdg-horizontal-border-color: var(--fv-border);
+        --gdg-accent-color: var(--fv-accent-2);
+        --gdg-accent-fg: #FFFFFF;
+    }}
+    [data-testid="stDataFrame"] > div,
+    [data-testid="stTable"] table {{
+        background: var(--fv-panel) !important;
+        color: var(--fv-text) !important;
+    }}
     [data-testid="stExpander"] {{
-        background: var(--fv-panel);
+        background: var(--fv-panel) !important;
+        color: var(--fv-text) !important;
         border: 1px solid var(--fv-border);
         border-radius: 14px;
     }}
+    [data-testid="stAlert"] {{
+        background: var(--fv-panel-alt) !important;
+        color: var(--fv-text) !important;
+        border: 1px solid var(--fv-border) !important;
+        border-radius: 12px !important;
+    }}
+    [data-testid="stAlert"] p {{ color: var(--fv-text) !important; }}
     .stAlert {{ border-radius: 12px !important; }}
     [data-testid="stPlotlyChart"] {{
         background: var(--fv-panel);
@@ -1016,45 +1072,119 @@ def main():
 
             # --- COMPARAÇÃO MULTI-GRANDEZAS / VARIÁVEIS (ATÉ 3) ---
             st.markdown("### 🔄 Comparação entre Diferentes Grandezas Físicas")
-            st.caption("Compare a grandeza principal com até 3 outras variáveis no mesmo dia.")
-            
-            dias_disp = sorted(df['Dia_Data'].dropna().unique())
-            dia_comp_var = st.selectbox("Data para Análise das Grandezas:", dias_disp, key='dia_comp_var')
-            df_dia_comp = df[df['Dia_Data'] == dia_comp_var].sort_values(by=col_data)
-            
+            st.caption(
+                "Escolha se deseja analisar as grandezas em um dia específico ou acompanhar "
+                "a relação entre elas durante um mês inteiro."
+            )
+
+            periodo_comp_var = st.radio(
+                "Período da comparação:",
+                options=["Diária", "Mensal"],
+                horizontal=True,
+                key="periodo_comparacao_grandezas"
+            )
+
+            if periodo_comp_var == "Diária":
+                dias_disp = sorted(df['Dia_Data'].dropna().unique())
+                dia_comp_var = st.selectbox(
+                    "Data para análise das grandezas:",
+                    dias_disp,
+                    format_func=lambda d: d.strftime('%d/%m/%Y'),
+                    key='dia_comp_var'
+                )
+                df_comp_var = df[df['Dia_Data'] == dia_comp_var].sort_values(by=col_data)
+                periodo_comp_label = dia_comp_var.strftime('%d/%m/%Y')
+                eixo_x_comp = "Horário"
+            else:
+                meses_comp_var = (
+                    df[['Ano_Mes_Sort', 'Ano_Mes_Texto']]
+                    .dropna()
+                    .drop_duplicates()
+                    .sort_values('Ano_Mes_Sort')
+                )
+                mapa_meses_comp_var = dict(zip(
+                    meses_comp_var['Ano_Mes_Sort'],
+                    meses_comp_var['Ano_Mes_Texto']
+                ))
+                meses_opcoes_comp_var = meses_comp_var['Ano_Mes_Sort'].tolist()
+                mes_comp_var = st.selectbox(
+                    "Mês para análise das grandezas:",
+                    options=meses_opcoes_comp_var,
+                    format_func=lambda mes: mapa_meses_comp_var[mes],
+                    key="mes_comp_var"
+                )
+                df_comp_var = df[df['Ano_Mes_Sort'] == mes_comp_var].sort_values(by=col_data)
+                periodo_comp_label = mapa_meses_comp_var[mes_comp_var]
+                eixo_x_comp = "Data e horário"
+
             var_opcoes = [c for c in var_cols if c != variavel_y]
             vars_comparacao = st.multiselect(
-                "Selecione até 3 grandezas secundárias para comparar:", 
-                options=var_opcoes, 
-                max_selections=3
+                "Selecione até 3 grandezas secundárias para comparar:",
+                options=var_opcoes,
+                max_selections=3,
+                key="grandezas_secundarias_comparacao"
             )
 
             if vars_comparacao:
                 fig_comp = make_subplots(specs=[[{"secondary_y": True}]])
-                fig_comp.add_trace(go.Scatter(x=df_dia_comp[col_data], y=df_dia_comp[variavel_y], name=f"Principal: {variavel_y}", line=dict(color='#27AE60', width=3)), secondary_y=False)
-                
+                fig_comp.add_trace(
+                    go.Scatter(
+                        x=df_comp_var[col_data],
+                        y=df_comp_var[variavel_y],
+                        name=f"Principal: {variavel_y}",
+                        line=dict(color='#27AE60', width=3)
+                    ),
+                    secondary_y=False
+                )
+
                 cores_sec = ['#E74C3C', '#8E44AD', '#F39C12']
                 for idx, v_sec in enumerate(vars_comparacao):
-                    fig_comp.add_trace(go.Scatter(x=df_dia_comp[col_data], y=df_dia_comp[v_sec], name=v_sec, line=dict(color=cores_sec[idx % len(cores_sec)], width=2, dash='dot')), secondary_y=True)
-                
-                fig_comp.update_layout(title=f"Comparação de Grandezas em {dia_comp_var.strftime('%d/%m/%Y')}", hovermode='x unified')
-                fig_comp.update_yaxes(title_text=f"<b>{variavel_y}</b>", secondary_y=False)
-                fig_comp.update_yaxes(title_text="<b>Grandezas Secundárias</b>", secondary_y=True)
-                exibir_grafico(fig_comp)
+                    fig_comp.add_trace(
+                        go.Scatter(
+                            x=df_comp_var[col_data],
+                            y=df_comp_var[v_sec],
+                            name=v_sec,
+                            line=dict(
+                                color=cores_sec[idx % len(cores_sec)],
+                                width=2,
+                                dash='dot'
+                            )
+                        ),
+                        secondary_y=True
+                    )
 
-            # --- NOVAS ANÁLISES: COMPARAÇÃO ENTRE DIAS E ANOS ---
+                fig_comp.update_layout(
+                    title=f"Comparação de grandezas — {periodo_comp_label}",
+                    hovermode='x unified',
+                    xaxis_title=eixo_x_comp
+                )
+                fig_comp.update_yaxes(title_text=f"<b>{variavel_y}</b>", secondary_y=False)
+                fig_comp.update_yaxes(title_text="<b>Grandezas secundárias</b>", secondary_y=True)
+                if periodo_comp_var == "Diária":
+                    fig_comp.update_xaxes(tickformat="%H:%M")
+                else:
+                    fig_comp.update_xaxes(tickformat="%d/%m %H:%M")
+                exibir_grafico(fig_comp)
+            else:
+                st.info("Selecione ao menos uma grandeza secundária para gerar a comparação.")
+
+            # --- NOVAS ANÁLISES: COMPARAÇÃO ENTRE DIAS, MESES E ANOS ---
             # Esta seção é adicional. Os gráficos de sobreposição já existentes
             # (comparação entre meses e comparação entre grandezas) foram mantidos.
             st.divider()
             st.markdown("## 📅 Comparações adicionais de períodos")
             st.markdown(
-                '<div class="section-intro">Compare dias específicos pela curva ao longo do dia '
-                'e compare anos pela evolução mensal. Estas análises são independentes dos gráficos '
-                'de sobreposição que já existiam no painel.</div>',
+                '<div class="section-intro">Compare dias pela curva intradiária, meses pelo comportamento '
+                'diário dentro de cada mês e anos pela evolução mensal. Estas análises são independentes '
+                'dos gráficos de sobreposição que já existiam no painel.</div>',
                 unsafe_allow_html=True
             )
 
-            tab_dias, tab_anos = st.tabs(["🗓️ Comparar dias", "📆 Comparar anos"])
+            tab_dias, tab_meses, tab_anos = st.tabs([
+                "🗓️ Comparar dias",
+                "📆 Comparar meses",
+                "📊 Comparar anos"
+            ])
 
             with tab_dias:
                 st.caption(
@@ -1101,6 +1231,68 @@ def main():
                     st.info("Selecione pelo menos dois dias para realizar a comparação.")
                 else:
                     st.info("Selecione os dias que deseja comparar.")
+
+            with tab_meses:
+                st.caption(
+                    "Selecione dois ou mais meses. Cada curva representa a média diária da variável "
+                    "escolhida, permitindo comparar como ela se comportou do primeiro ao último dia de cada mês."
+                )
+                meses_disponiveis = (
+                    df[['Ano_Mes_Sort', 'Ano_Mes_Texto']]
+                    .dropna()
+                    .drop_duplicates()
+                    .sort_values('Ano_Mes_Sort')
+                )
+                mapa_meses_adicionais = dict(zip(
+                    meses_disponiveis['Ano_Mes_Sort'],
+                    meses_disponiveis['Ano_Mes_Texto']
+                ))
+                opcoes_meses_adicionais = meses_disponiveis['Ano_Mes_Sort'].tolist()
+                padrao_meses_adicionais = (
+                    opcoes_meses_adicionais[-2:]
+                    if len(opcoes_meses_adicionais) >= 2
+                    else opcoes_meses_adicionais
+                )
+                meses_adicionais_selecionados = st.multiselect(
+                    "Meses para comparar:",
+                    options=opcoes_meses_adicionais,
+                    default=padrao_meses_adicionais,
+                    format_func=lambda mes: mapa_meses_adicionais[mes],
+                    key="novos_meses_comparacao"
+                )
+
+                if len(meses_adicionais_selecionados) >= 2:
+                    df_meses_adicionais = df[
+                        df['Ano_Mes_Sort'].isin(meses_adicionais_selecionados)
+                    ].copy()
+                    df_meses_adicionais['Mes_Comparacao'] = df_meses_adicionais['Ano_Mes_Sort'].map(
+                        mapa_meses_adicionais
+                    )
+                    df_meses_adicionais_grp = (
+                        df_meses_adicionais
+                        .groupby(['Mes_Comparacao', 'Dia_Do_Mes'], as_index=False)[variavel_y]
+                        .mean()
+                    )
+                    fig_meses_adicionais = px.line(
+                        df_meses_adicionais_grp,
+                        x='Dia_Do_Mes',
+                        y=variavel_y,
+                        color='Mes_Comparacao',
+                        markers=True,
+                        title=f"Comparação mensal de {variavel_y} — média por dia do mês"
+                    )
+                    fig_meses_adicionais.update_layout(
+                        xaxis=dict(title="Dia do mês", tickmode="linear", dtick=1),
+                        yaxis_title=variavel_y,
+                        hovermode="x unified",
+                        legend_title="Mês",
+                        margin=dict(l=15, r=15, t=45, b=15)
+                    )
+                    exibir_grafico(fig_meses_adicionais)
+                elif len(meses_adicionais_selecionados) == 1:
+                    st.info("Selecione pelo menos dois meses para realizar a comparação.")
+                else:
+                    st.info("Selecione os meses que deseja comparar.")
 
             with tab_anos:
                 st.caption(
