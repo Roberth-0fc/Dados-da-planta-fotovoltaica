@@ -372,6 +372,23 @@ def aplicar_estilo_interface(tema_visual: str):
     [data-testid="stSlider"] [role="slider"] {{
         border-color: var(--fv-accent-2) !important;
     }}
+    [data-testid="stThumbValue"],
+    [data-testid="stSlider"] [data-baseweb="slider"] [aria-hidden="true"],
+    [data-testid="stSlider"] [data-baseweb="slider"] span {{
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        white-space: nowrap !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+        min-width: 3.2rem !important;
+        width: max-content !important;
+        max-width: none !important;
+        padding-left: 0.25rem !important;
+        padding-right: 0.25rem !important;
+        line-height: 1.2 !important;
+        box-sizing: border-box !important;
+    }}
 
     @media (max-width: 760px) {{
         .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
@@ -556,19 +573,26 @@ def criar_grafico_base(df, x_col, y_col, titulo, tipo_grafico, cor='#2980B9'):
 
 
 def exibir_condicoes_termicas(df, variavel_y, irrad_col):
-    """Mostra o contexto térmico ao lado dos indicadores gerais quando a variável é temperatura."""
+    """Exibe métricas térmicas em visão diária ou mensal."""
     st.markdown(f"### 🌡️ Condições térmicas — {variavel_y}")
     st.caption(
         "Os símbolos de sol e nuvens representam as condições de irradiância medidas pela própria planta; "
         "não são uma previsão meteorológica."
     )
 
-    dias_temperatura = sorted(df['Dia_Data'].dropna().unique())
-    if not dias_temperatura:
-        st.info("Não há datas disponíveis para contextualizar a temperatura.")
-        return
+    periodo_termico = st.radio(
+        "Visualização das métricas térmicas:",
+        options=["Diária", "Mensal"],
+        horizontal=True,
+        key="periodo_condicoes_termicas_topo"
+    )
 
-    with st.container(border=True):
+    if periodo_termico == "Diária":
+        dias_temperatura = sorted(df['Dia_Data'].dropna().unique())
+        if not dias_temperatura:
+            st.info("Não há datas disponíveis para contextualizar a temperatura.")
+            return
+
         dia_temperatura = st.selectbox(
             "Dia para contextualizar a temperatura:",
             options=dias_temperatura,
@@ -576,40 +600,68 @@ def exibir_condicoes_termicas(df, variavel_y, irrad_col):
             format_func=lambda d: d.strftime('%d/%m/%Y'),
             key="dia_contexto_temperatura_topo"
         )
-
         df_temp_contexto = df[df['Dia_Data'] == dia_temperatura]
-        serie_temp = df_temp_contexto[variavel_y].dropna()
-        media_temp = serie_temp.mean() if not serie_temp.empty else None
-        maxima_temp = serie_temp.max() if not serie_temp.empty else None
+        periodo_label = dia_temperatura.strftime('%d/%m/%Y')
+        periodo_irrad_label = "Irradiância média com luz no dia"
 
-        irradiancia_media_dia = None
-        if irrad_col:
-            serie_irrad_luz = df_temp_contexto.loc[df_temp_contexto[irrad_col] >= 100, irrad_col].dropna()
-            if not serie_irrad_luz.empty:
-                irradiancia_media_dia = serie_irrad_luz.mean()
+    else:
+        meses_temperatura = (
+            df[['Ano_Mes_Sort', 'Ano_Mes_Texto']]
+            .dropna()
+            .drop_duplicates()
+            .sort_values('Ano_Mes_Sort')
+        )
+        if meses_temperatura.empty:
+            st.info("Não há meses disponíveis para contextualizar a temperatura.")
+            return
 
-        if irradiancia_media_dia is not None:
-            if irradiancia_media_dia >= 600:
-                icone_ceu = "☀️"
-                texto_ceu = "Irradiância elevada durante os períodos de luz"
-            elif irradiancia_media_dia >= 250:
-                icone_ceu = "⛅"
-                texto_ceu = "Irradiância intermediária durante os períodos de luz"
-            else:
-                icone_ceu = "☁️"
-                texto_ceu = "Irradiância reduzida durante os períodos de luz"
-            texto_irrad = f"Irradiância média com luz: {irradiancia_media_dia:.1f} W/m²"
+        mapa_meses = dict(zip(meses_temperatura['Ano_Mes_Sort'], meses_temperatura['Ano_Mes_Texto']))
+        meses_opcoes = meses_temperatura['Ano_Mes_Sort'].tolist()
+        mes_temperatura = st.selectbox(
+            "Mês para contextualizar a temperatura:",
+            options=meses_opcoes,
+            index=len(meses_opcoes) - 1,
+            format_func=lambda mes: mapa_meses[mes],
+            key="mes_contexto_temperatura_topo"
+        )
+        df_temp_contexto = df[df['Ano_Mes_Sort'] == mes_temperatura]
+        periodo_label = mapa_meses[mes_temperatura]
+        periodo_irrad_label = "Irradiância média com luz no mês"
+
+    serie_temp = pd.to_numeric(df_temp_contexto[variavel_y], errors='coerce').dropna()
+    media_temp = serie_temp.mean() if not serie_temp.empty else None
+    maxima_temp = serie_temp.max() if not serie_temp.empty else None
+
+    irradiancia_media_periodo = None
+    if irrad_col:
+        serie_irrad = pd.to_numeric(df_temp_contexto[irrad_col], errors='coerce')
+        serie_irrad_luz = serie_irrad[serie_irrad >= 100].dropna()
+        if not serie_irrad_luz.empty:
+            irradiancia_media_periodo = serie_irrad_luz.mean()
+
+    if irradiancia_media_periodo is not None:
+        if irradiancia_media_periodo >= 600:
+            icone_ceu = "☀️"
+            texto_ceu = "Irradiância elevada durante os períodos de luz"
+        elif irradiancia_media_periodo >= 250:
+            icone_ceu = "⛅"
+            texto_ceu = "Irradiância intermediária durante os períodos de luz"
         else:
-            icone_ceu = "🌤️"
-            texto_ceu = "Sem irradiância suficiente para caracterizar visualmente o céu"
-            texto_irrad = "Irradiância não disponível neste dia"
+            icone_ceu = "☁️"
+            texto_ceu = "Irradiância reduzida durante os períodos de luz"
+        texto_irrad = f"{periodo_irrad_label}: {irradiancia_media_periodo:.1f} W/m²"
+    else:
+        icone_ceu = "🌤️"
+        texto_ceu = "Sem irradiância suficiente para caracterizar visualmente o céu"
+        texto_irrad = "Irradiância não disponível neste período"
 
+    with st.container(border=True):
         t1, t2 = st.columns(2)
         with t1:
             valor_media = f"{media_temp:.1f} °C" if media_temp is not None else "N/D"
             st.markdown(
                 f'<div class="temperature-panel"><div class="temperature-icon">🌡️</div>'
-                f'<div class="temperature-sub">Temperatura média</div>'
+                f'<div class="temperature-sub">Temperatura média do período</div>'
                 f'<div class="temperature-main">{valor_media}</div>'
                 f'<div class="temperature-sub">{variavel_y}</div></div>',
                 unsafe_allow_html=True
@@ -618,9 +670,9 @@ def exibir_condicoes_termicas(df, variavel_y, irrad_col):
             valor_max = f"{maxima_temp:.1f} °C" if maxima_temp is not None else "N/D"
             st.markdown(
                 f'<div class="temperature-panel"><div class="temperature-icon">🔥</div>'
-                f'<div class="temperature-sub">Temperatura máxima</div>'
+                f'<div class="temperature-sub">Temperatura máxima do período</div>'
                 f'<div class="temperature-main">{valor_max}</div>'
-                f'<div class="temperature-sub">{dia_temperatura.strftime("%d/%m/%Y")}</div></div>',
+                f'<div class="temperature-sub">{periodo_label}</div></div>',
                 unsafe_allow_html=True
             )
 
@@ -1123,7 +1175,7 @@ def main():
                         max_value=50,
                         value=20,
                         step=5,
-                        format="%d",
+                        format="%d%%",
                         help="É um critério indicativo: sinaliza dias cujo indicador energia/irradiação ficou abaixo da mediana de referência por esta porcentagem."
                     )
                 with valor_col:
