@@ -8,70 +8,326 @@ from plotly.subplots import make_subplots
 # Configuração da página
 st.set_page_config(page_title="Monitoramento Fotovoltaico", page_icon="☀️", layout="wide")
 
-# Estilização visual: mantém a estrutura original e acrescenta cores aos cartões.
-st.markdown("""
+def aplicar_estilo_interface(tema_visual: str):
+    """Aplica uma identidade visual solar em tons suaves, sem depender do tema do navegador."""
+    if tema_visual == "Claro suave":
+        paleta = {
+            "app_bg": "#E8EFE8",
+            "sidebar_bg": "linear-gradient(180deg, #DDE9DF 0%, #E9F0E8 100%)",
+            "panel": "#F5F8F2",
+            "panel_alt": "#EDF3EB",
+            "panel_hover": "#E4EEE5",
+            "text": "#263B30",
+            "muted": "#66786C",
+            "border": "#D2DFD3",
+            "accent": "#94B82F",
+            "accent_2": "#23966B",
+            "blue": "#4B9FC0",
+            "shadow": "rgba(43, 75, 54, 0.10)",
+            "grid": "#DCE6DC",
+            "chart_paper": "#F5F8F2",
+            "chart_plot": "#F0F5EE",
+            "chart_text": "#30483A",
+            "chart_hover": "#FFFFFF",
+        }
+    else:
+        paleta = {
+            "app_bg": "#182820",
+            "sidebar_bg": "linear-gradient(180deg, #1B3027 0%, #20352B 100%)",
+            "panel": "#22372D",
+            "panel_alt": "#293F34",
+            "panel_hover": "#304B3D",
+            "text": "#ECF4EC",
+            "muted": "#B0C2B4",
+            "border": "#3C5948",
+            "accent": "#D7EC55",
+            "accent_2": "#39C58A",
+            "blue": "#78C7E8",
+            "shadow": "rgba(0, 0, 0, 0.22)",
+            "grid": "#3A5144",
+            "chart_paper": "#22372D",
+            "chart_plot": "#1D3027",
+            "chart_text": "#EAF3EB",
+            "chart_hover": "#30473A",
+        }
+
+    st.markdown(f"""
     <style>
-    div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: 750 !important;
-        color: #d9ffe8 !important;
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #b9d8c8 !important;
-        font-weight: 600 !important;
-    }
-    [data-testid="stMetric"] {
-        background: linear-gradient(135deg, rgba(13, 84, 55, 0.32), rgba(23, 47, 66, 0.42));
-        border: 1px solid rgba(72, 210, 137, 0.30);
-        border-radius: 15px;
-        padding: 13px 15px;
-        box-shadow: 0 5px 18px rgba(0, 0, 0, 0.10);
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] {
+    :root {{
+        --fv-app-bg: {paleta['app_bg']};
+        --fv-sidebar-bg: {paleta['sidebar_bg']};
+        --fv-panel: {paleta['panel']};
+        --fv-panel-alt: {paleta['panel_alt']};
+        --fv-panel-hover: {paleta['panel_hover']};
+        --fv-text: {paleta['text']};
+        --fv-muted: {paleta['muted']};
+        --fv-border: {paleta['border']};
+        --fv-accent: {paleta['accent']};
+        --fv-accent-2: {paleta['accent_2']};
+        --fv-blue: {paleta['blue']};
+        --fv-shadow: {paleta['shadow']};
+    }}
+
+    html, body, [data-testid="stAppViewContainer"], .stApp {{
+        background: var(--fv-app-bg) !important;
+        color: var(--fv-text) !important;
+    }}
+    [data-testid="stHeader"] {{ background: transparent !important; }}
+    [data-testid="stToolbar"] {{ background: transparent !important; }}
+    .block-container {{
+        max-width: 1660px;
+        padding-top: 1.35rem;
+        padding-bottom: 3rem;
+    }}
+    [data-testid="stSidebar"] {{
+        background: {paleta['sidebar_bg']} !important;
+        border-right: 1px solid var(--fv-border);
+    }}
+    [data-testid="stSidebar"] > div:first-child {{ background: transparent !important; }}
+
+    h1, h2, h3, h4, p, label, span, div {{
+        text-wrap: pretty;
+    }}
+    h1, h2, h3, h4 {{ color: var(--fv-text) !important; }}
+    h2 {{
+        padding: 0.35rem 0 0.45rem 0.75rem;
+        border-left: 4px solid var(--fv-accent-2);
+        margin-top: 1rem;
+    }}
+    h3 {{ color: var(--fv-accent-2) !important; }}
+    [data-testid="stCaptionContainer"] {{ color: var(--fv-muted) !important; }}
+    hr {{ border-color: var(--fv-border) !important; }}
+
+    /* Cartões e indicadores */
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        background: var(--fv-panel) !important;
+        border: 1px solid var(--fv-border) !important;
+        border-radius: 18px !important;
+        box-shadow: 0 8px 24px var(--fv-shadow);
+        overflow: hidden;
+    }}
+    [data-testid="stMetric"] {{
+        min-height: 112px;
+        padding: 15px 16px;
+        border: 1px solid var(--fv-border);
         border-radius: 16px;
-    }
-    [data-testid="stSidebar"] {
-        border-right: 1px solid rgba(72, 210, 137, 0.22);
-    }
-    .stAlert {
-        border-radius: 10px;
-    }
-    .explanation-box {
-        background: linear-gradient(135deg, rgba(41, 128, 185, 0.13), rgba(39, 174, 96, 0.09));
-        border-left: 4px solid #2ecc71;
-        padding: 12px 15px;
-        border-radius: 9px;
+        background: linear-gradient(135deg, var(--fv-panel-alt), var(--fv-panel));
+        box-shadow: 0 6px 18px var(--fv-shadow);
+    }}
+    [data-testid="stMetricLabel"] {{
+        color: var(--fv-muted) !important;
+        font-weight: 650 !important;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: var(--fv-accent-2) !important;
+        font-size: 1.85rem !important;
+        font-weight: 780 !important;
+    }}
+    [data-testid="stMetricDelta"] {{ font-weight: 600 !important; }}
+
+    /* Campos de seleção, filtros e botões */
+    [data-baseweb="select"] > div,
+    [data-baseweb="input"] > div,
+    [data-baseweb="textarea"] > div,
+    input, textarea {{
+        background: var(--fv-panel) !important;
+        color: var(--fv-text) !important;
+        border-color: var(--fv-border) !important;
+        border-radius: 10px !important;
+    }}
+    [data-baseweb="tag"] {{
+        background: var(--fv-accent-2) !important;
+        color: #FFFFFF !important;
+        border-radius: 8px !important;
+    }}
+    button[kind="secondary"], button[kind="primary"] {{
+        border-radius: 10px !important;
+        border: 1px solid var(--fv-border) !important;
+        transition: all 0.18s ease-in-out;
+    }}
+    button[kind="primary"] {{
+        background: var(--fv-accent-2) !important;
+        color: #FFFFFF !important;
+    }}
+    button[kind="secondary"] {{
+        background: var(--fv-panel-alt) !important;
+        color: var(--fv-text) !important;
+    }}
+    button:hover {{ filter: brightness(1.06); border-color: var(--fv-accent-2) !important; }}
+
+    /* Abas, tabelas, alertas e gráficos */
+    [data-baseweb="tab-list"] {{ gap: 8px; }}
+    button[data-baseweb="tab"] {{
+        background: var(--fv-panel-alt) !important;
+        border-radius: 10px 10px 0 0 !important;
+        color: var(--fv-muted) !important;
+    }}
+    button[data-baseweb="tab"][aria-selected="true"] {{
+        color: var(--fv-accent-2) !important;
+        border-bottom: 3px solid var(--fv-accent-2) !important;
+    }}
+    [data-testid="stDataFrame"], [data-testid="stTable"] {{
+        border: 1px solid var(--fv-border);
+        border-radius: 12px;
+        overflow: hidden;
+    }}
+    [data-testid="stExpander"] {{
+        background: var(--fv-panel);
+        border: 1px solid var(--fv-border);
+        border-radius: 14px;
+    }}
+    .stAlert {{ border-radius: 12px !important; }}
+    [data-testid="stPlotlyChart"] {{
+        background: var(--fv-panel);
+        border: 1px solid var(--fv-border);
+        border-radius: 16px;
+        padding: 7px 8px 2px 8px;
+        box-shadow: 0 7px 20px var(--fv-shadow);
+    }}
+
+    /* Cabeçalho principal */
+    .fv-hero {{
+        position: relative;
+        overflow: hidden;
+        padding: 25px 30px 24px 30px;
+        margin: 0 0 22px 0;
+        border: 1px solid var(--fv-border);
+        border-radius: 22px;
+        background:
+            radial-gradient(circle at 86% 18%, rgba(215, 236, 85, 0.22), transparent 23%),
+            radial-gradient(circle at 72% 110%, rgba(57, 197, 138, 0.22), transparent 34%),
+            linear-gradient(115deg, #173D30 0%, #1D5642 48%, #264B3A 100%);
+        box-shadow: 0 12px 30px var(--fv-shadow);
+        color: #F4FAF2;
+    }}
+    .fv-hero-kicker {{
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 11px;
+        margin-bottom: 9px;
+        border: 1px solid rgba(231, 248, 187, 0.32);
+        border-radius: 30px;
+        background: rgba(8, 25, 18, 0.22);
+        color: #E4F58C;
+        font-size: 0.76rem;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+    }}
+    .fv-hero h1 {{
+        margin: 0 !important;
+        color: #FFFFFF !important;
+        font-size: clamp(1.7rem, 3vw, 2.45rem) !important;
+        line-height: 1.12;
+        letter-spacing: -0.035em;
+    }}
+    .fv-hero p {{
+        max-width: 780px;
+        margin: 9px 0 0 0;
+        color: rgba(244, 250, 242, 0.82) !important;
+        font-size: 1rem;
+    }}
+    .fv-hero-orb {{
+        position: absolute;
+        right: 5%;
+        top: 13%;
+        width: 118px;
+        height: 118px;
+        border: 1px solid rgba(229, 247, 124, 0.42);
+        border-radius: 50%;
+        box-shadow: 0 0 0 13px rgba(229, 247, 124, 0.055), 0 0 0 27px rgba(229, 247, 124, 0.035);
+    }}
+    .fv-hero-orb:after {{
+        content: "☀";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #E9F77B;
+        font-size: 3.8rem;
+        opacity: 0.9;
+    }}
+    .section-intro {{
+        padding: 14px 17px;
+        border-radius: 13px;
+        background: linear-gradient(100deg, rgba(57, 197, 138, 0.13), rgba(120, 199, 232, 0.10));
+        border: 1px solid var(--fv-border);
+        border-left: 4px solid var(--fv-accent-2);
+        color: var(--fv-text);
+        margin: 5px 0 14px 0;
+    }}
+    .explanation-box {{
+        background: linear-gradient(135deg, var(--fv-panel-alt), var(--fv-panel));
+        border: 1px solid var(--fv-border);
+        border-left: 4px solid var(--fv-blue);
+        color: var(--fv-text);
+        padding: 14px 17px;
+        border-radius: 12px;
         margin-bottom: 15px;
         font-size: 0.95rem;
-    }
-    .section-intro {
-        padding: 12px 16px;
-        border-radius: 12px;
-        background: linear-gradient(100deg, rgba(25, 135, 84, 0.16), rgba(13, 110, 253, 0.10));
-        border: 1px solid rgba(72, 210, 137, 0.22);
-        margin: 5px 0 14px 0;
-    }
-    .temperature-panel {
-        padding: 17px 19px;
-        border-radius: 16px;
-        background: linear-gradient(115deg, rgba(13, 110, 253, 0.20), rgba(32, 201, 151, 0.16), rgba(255, 193, 7, 0.13));
-        border: 1px solid rgba(105, 190, 220, 0.35);
+    }}
+    .explanation-box h4 {{ color: var(--fv-accent-2) !important; }}
+    .temperature-panel {{
+        min-height: 172px;
+        padding: 18px 19px;
+        border-radius: 17px;
+        background:
+            radial-gradient(circle at 90% 15%, rgba(255, 211, 92, 0.22), transparent 28%),
+            linear-gradient(120deg, rgba(50, 151, 185, 0.22), rgba(44, 170, 119, 0.17), rgba(231, 178, 64, 0.12)),
+            var(--fv-panel);
+        border: 1px solid var(--fv-border);
+        box-shadow: 0 8px 21px var(--fv-shadow);
         margin: 8px 0 15px 0;
-    }
-    .temperature-icon {
-        font-size: 2.25rem;
-        line-height: 1.2;
-    }
-    .temperature-main {
-        font-size: 1.55rem;
-        font-weight: 750;
-    }
-    .temperature-sub {
-        color: #a9c8d9;
-        font-size: 0.90rem;
-    }
+        color: var(--fv-text);
+    }}
+    .temperature-icon {{ font-size: 2.25rem; line-height: 1.2; }}
+    .temperature-main {{ color: var(--fv-text); font-size: 1.42rem; font-weight: 780; margin-top: 2px; }}
+    .temperature-sub {{ color: var(--fv-muted); font-size: 0.88rem; }}
+
+    @media (max-width: 760px) {{
+        .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
+        .fv-hero {{ padding: 21px 19px; }}
+        .fv-hero-orb {{ right: -28px; opacity: 0.45; }}
+    }}
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+
+def exibir_grafico(fig):
+    """Padroniza somente a aparência dos gráficos; não altera dados ou séries."""
+    tema_visual = st.session_state.get("tema_dashboard", "Escuro suave")
+    if tema_visual == "Claro suave":
+        papel, area, texto = "#F5F8F2", "#F0F5EE", "#30483A"
+        grade, hover, template = "#DCE6DC", "#FFFFFF", "plotly_white"
+    else:
+        papel, area, texto = "#22372D", "#1D3027", "#EAF3EB"
+        grade, hover, template = "#3A5144", "#30473A", "plotly_dark"
+
+    fig.update_layout(
+        template=template,
+        paper_bgcolor=papel,
+        plot_bgcolor=area,
+        font=dict(family="Inter, Arial, sans-serif", color=texto, size=12),
+        title_font=dict(color=texto, size=16),
+        legend=dict(font=dict(color=texto), bgcolor="rgba(0,0,0,0)"),
+        hoverlabel=dict(bgcolor=hover, font=dict(color=texto)),
+        margin=dict(l=18, r=18, t=48, b=18),
+    )
+    fig.update_xaxes(
+        gridcolor=grade,
+        linecolor=grade,
+        zerolinecolor=grade,
+        tickfont=dict(color=texto),
+        title_font=dict(color=texto),
+    )
+    fig.update_yaxes(
+        gridcolor=grade,
+        linecolor=grade,
+        zerolinecolor=grade,
+        tickfont=dict(color=texto),
+        title_font=dict(color=texto),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "responsive": True})
 
 @st.cache_data(show_spinner=False)
 def load_and_clean_data(file_bytes: bytes, file_name: str):
@@ -201,11 +457,32 @@ def criar_grafico_base(df, x_col, y_col, titulo, tipo_grafico, cor='#2980B9'):
     return fig
 
 def main():
-    st.title("☀️ Painel de Análise de Planta Fotovoltaica")
-
     # --- BARRA LATERAL ---
-    st.sidebar.header("📁 Importação de Dados")
+    st.sidebar.header("☀️ Central Solar")
     st.sidebar.caption(f"Aplicação: Streamlit {st.__version__}")
+    tema_visual = st.sidebar.selectbox(
+        "Aparência da interface",
+        ["Escuro suave", "Claro suave"],
+        index=0,
+        key="tema_dashboard",
+        help="Escolha uma paleta equilibrada. O tema altera também o fundo dos gráficos."
+    )
+    aplicar_estilo_interface(tema_visual)
+
+    st.markdown(
+        """
+        <div class="fv-hero">
+            <div class="fv-hero-orb"></div>
+            <div class="fv-hero-kicker">☀ MONITORAMENTO • ENERGIA FOTOVOLTAICA</div>
+            <h1>Painel de Análise da Planta Fotovoltaica</h1>
+            <p>Acompanhe geração, condições ambientais e desempenho da planta com análises históricas e comparativas.</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.sidebar.divider()
+    st.sidebar.header("📁 Importação de Dados")
     uploaded_file = st.sidebar.file_uploader("Carregue sua planilha (.csv, .xls, .xlsx)", type=['csv', 'xlsx', 'xls'])
 
     if uploaded_file is not None:
@@ -313,7 +590,7 @@ def main():
                 cor='#8E44AD'
             )
             fig_hist.update_layout(xaxis=dict(title="Mês/Ano"), yaxis=dict(title=variavel_y))
-            st.plotly_chart(fig_hist, use_container_width=True)
+            exibir_grafico(fig_hist)
 
             st.divider()
 
@@ -338,7 +615,7 @@ def main():
                         df_sem = df[(df['Ano_Num'] == ano_semestral) & (df['Semestre_Nome'] == semestre_sel)]
                         df_sem_grp = df_sem.groupby(['Mes_Num', 'Nome_Mes_Formatado'])[variavel_y].mean().reset_index().sort_values('Mes_Num')
                         fig_sem = criar_grafico_base(df_sem_grp, 'Nome_Mes_Formatado', variavel_y, f"Média Mensal ({semestre_sel}/{ano_semestral})", tipo_grafico, '#E67E22')
-                        st.plotly_chart(fig_sem, use_container_width=True)
+                        exibir_grafico(fig_sem)
 
                 # CARD 2: MENSAL
                 with g2:
@@ -355,7 +632,7 @@ def main():
                         df_mes_grp = df_mes.groupby('Dia_Do_Mes')[variavel_y].mean().reset_index()
                         fig_mes = criar_grafico_base(df_mes_grp, 'Dia_Do_Mes', variavel_y, f"Média Diária ({mes_mensal}/{ano_mensal})", tipo_grafico, '#2980B9')
                         fig_mes.update_layout(xaxis=dict(tickmode='linear', dtick=1))
-                        st.plotly_chart(fig_mes, use_container_width=True)
+                        exibir_grafico(fig_mes)
 
                 # CARD 3: DIÁRIO
                 with g3:
@@ -366,7 +643,7 @@ def main():
                         
                         df_dia = df[df['Dia_Data'] == dia_diario].sort_values(by=col_data)
                         fig_dia = criar_grafico_base(df_dia, col_data, variavel_y, f"Intradiário ({dia_diario.strftime('%d/%m/%Y')})", tipo_grafico, '#27AE60')
-                        st.plotly_chart(fig_dia, use_container_width=True)
+                        exibir_grafico(fig_dia)
 
             else:
                 # MODO FOCO (AMPLIADO)
@@ -384,7 +661,7 @@ def main():
                         df_sem = df[(df['Ano_Num'] == ano_semestral) & (df['Semestre_Nome'] == semestre_sel)]
                         df_sem_grp = df_sem.groupby(['Mes_Num', 'Nome_Mes_Formatado'])[variavel_y].mean().reset_index().sort_values('Mes_Num')
                         fig_sem = criar_grafico_base(df_sem_grp, 'Nome_Mes_Formatado', variavel_y, f"Evolução Semestral ({semestre_sel}/{ano_semestral})", tipo_grafico, '#E67E22')
-                        st.plotly_chart(fig_sem, use_container_width=True)
+                        exibir_grafico(fig_sem)
                     elif "Mensal" in opcao_foco:
                         cf1, cf2 = st.columns(2)
                         with cf1:
@@ -395,13 +672,13 @@ def main():
                         df_mes = df[(df['Ano_Num'] == ano_mensal) & (df['Mes_Num'] == mes_mensal)]
                         df_mes_grp = df_mes.groupby('Dia_Do_Mes')[variavel_y].mean().reset_index()
                         fig_mes = criar_grafico_base(df_mes_grp, 'Dia_Do_Mes', variavel_y, f"Evolução Mensal ({mes_mensal}/{ano_mensal})", tipo_grafico, '#2980B9')
-                        st.plotly_chart(fig_mes, use_container_width=True)
+                        exibir_grafico(fig_mes)
                     else:
                         dias_disp = sorted(df['Dia_Data'].dropna().unique())
                         dia_diario = st.selectbox("Data:", dias_disp, key='foco_dia')
                         df_dia = df[df['Dia_Data'] == dia_diario].sort_values(by=col_data)
                         fig_dia = criar_grafico_base(df_dia, col_data, variavel_y, f"Evolução Diária ({dia_diario.strftime('%d/%m/%Y')})", tipo_grafico, '#27AE60')
-                        st.plotly_chart(fig_dia, use_container_width=True)
+                        exibir_grafico(fig_dia)
 
             st.divider()
 
@@ -437,7 +714,7 @@ def main():
                     )
                     fig_pie.update_traces(textinfo='percent+label')
                     fig_pie.update_layout(margin=dict(l=10, r=10, t=35, b=10))
-                    st.plotly_chart(fig_pie, use_container_width=True)
+                    exibir_grafico(fig_pie)
 
             st.divider()
 
@@ -465,7 +742,7 @@ def main():
                     markers=True
                 )
                 fig_multi_mes.update_layout(xaxis=dict(title="Dia do Mês", tickmode='linear', dtick=1), hovermode="x unified")
-                st.plotly_chart(fig_multi_mes, use_container_width=True)
+                exibir_grafico(fig_multi_mes)
 
             st.divider()
 
@@ -495,7 +772,7 @@ def main():
                 fig_comp.update_layout(title=f"Comparação de Grandezas em {dia_comp_var.strftime('%d/%m/%Y')}", hovermode='x unified')
                 fig_comp.update_yaxes(title_text=f"<b>{variavel_y}</b>", secondary_y=False)
                 fig_comp.update_yaxes(title_text="<b>Grandezas Secundárias</b>", secondary_y=True)
-                st.plotly_chart(fig_comp, use_container_width=True)
+                exibir_grafico(fig_comp)
 
             # --- NOVAS ANÁLISES: COMPARAÇÃO ENTRE DIAS E ANOS ---
             # Esta seção é adicional. Os gráficos de sobreposição já existentes
@@ -551,7 +828,7 @@ def main():
                         legend_title="Dia",
                         margin=dict(l=15, r=15, t=45, b=15)
                     )
-                    st.plotly_chart(fig_dias_novo, use_container_width=True)
+                    exibir_grafico(fig_dias_novo)
                 elif len(dias_selecionados) == 1:
                     st.info("Selecione pelo menos dois dias para realizar a comparação.")
                 else:
@@ -619,7 +896,7 @@ def main():
                         legend_title="Ano",
                         margin=dict(l=15, r=15, t=45, b=15)
                     )
-                    st.plotly_chart(fig_anos_novo, use_container_width=True)
+                    exibir_grafico(fig_anos_novo)
                 elif len(anos_selecionados) == 1:
                     st.info("Selecione pelo menos dois anos para realizar a comparação.")
                 else:
@@ -742,7 +1019,7 @@ def main():
                         hovermode="x unified",
                         margin=dict(l=15, r=15, t=45, b=15)
                     )
-                    st.plotly_chart(fig_energia_dias, use_container_width=True)
+                    exibir_grafico(fig_energia_dias)
 
                     if irrad_col:
                         st.markdown("#### Dias com possível desempenho abaixo da referência")
