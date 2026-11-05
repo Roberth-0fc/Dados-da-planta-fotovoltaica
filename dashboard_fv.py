@@ -1174,29 +1174,34 @@ def main():
             st.divider()
             st.markdown("## 🚨 Análise de geração e possíveis anomalias")
             st.caption(
-                "A análise usa a potência registrada e estima a energia diária. Quando há irradiância, "
-                "também compara a energia com a radiação recebida para evitar classificar automaticamente "
-                "um dia nublado como falha da planta."
+                "Compara o desempenho diário da planta com uma referência estatística escolhida pelo usuário. "
+                "A referência é calculada a partir dos próprios dados históricos válidos da planilha, quando disponível."
             )
 
-            if potencia_col:
-                slider_col, valor_col = st.columns([5, 1])
-                with slider_col:
-                    limite_amostras = st.slider(
-                        "Sensibilidade para sinalizar desempenho abaixo da referência:",
-                        min_value=10,
-                        max_value=50,
-                        value=20,
-                        step=5,
-                        format="%d%%",
-                        help="É um critério indicativo: sinaliza dias cujo indicador energia/irradiação ficou abaixo da mediana de referência por esta porcentagem."
-                    )
-                with valor_col:
-                    st.markdown(
-                        f'<div class="sensitivity-badge">{limite_amostras}%</div>',
-                        unsafe_allow_html=True
-                    )
+            with st.expander("ℹ️ O que é a referência e como o dashboard decide sinalizar um dia?", expanded=True):
+                st.markdown(
+                    """
+                    **O que significa referência?** É um valor de desempenho considerado típico para a própria planta. O dashboard calcula primeiro o índice diário:
 
+                    **Índice energia/irradiação = energia diária (kWh) ÷ irradiação diária (kWh/m²).**
+
+                    Depois compara o índice de cada dia com a referência selecionada. Por exemplo, com sensibilidade de **25%**, um dia é sinalizado quando seu índice fica **mais de 25% abaixo da referência** (isto é, abaixo de 75% do valor de referência).
+
+                    Para fazer a comparação, são considerados dias com pelo menos **0,50 kWh/m² de irradiação diária** e quantidade de amostras considerada completa. Dias com menos de 75% da quantidade típica de amostras são marcados como **Dados incompletos** e não entram no cálculo da referência.
+
+                    **Minha recomendação:** começar com a **mediana do mesmo mês do ano**. Ela compara, por exemplo, janeiros com outros janeiros disponíveis na planilha, reduzindo parte do efeito da sazonalidade. A mediana também é menos influenciada por dias extremos do que a média. Se houver menos de 5 dias válidos daquele mês, o dashboard usa automaticamente a mediana do histórico completo e informa isso na tabela.
+
+                    **Importante:** este índice é um indicador estatístico relativo, útil para triagem de dias suspeitos. Ele **não é o Performance Ratio (PR) oficial nem uma medição direta de eficiência**. O PR conforme as métricas usuais de monitoramento fotovoltaico também considera a potência nominal instalada e a irradiação no plano dos módulos. Esses dados e critérios precisam estar definidos para calcular o PR formalmente.
+
+                    Referências técnicas: [Sandia PV Performance Modeling Collaborative](https://pvpmc.sandia.gov/modeling-guide/5-ac-system-output/pv-performance-metrics/performance-ratio/) e [NREL — Performance of Photovoltaic Systems](https://www.nrel.gov/docs/fy20osti/75162.pdf).
+                    """
+                )
+                st.caption(
+                    "Fórmula do alerta: índice diário < referência aplicada × (1 − sensibilidade/100). "
+                    "A classificação é um alerta estatístico, não um diagnóstico automático de defeito."
+                )
+
+            if potencia_col:
                 df_anomalia_base = df.dropna(subset=[potencia_col]).copy()
                 df_anomalia_base['_Energia_Intervalo_kWh'] = df_anomalia_base[potencia_col] * 0.25 / 1000
                 agregacoes_diarias = {
@@ -1210,6 +1215,7 @@ def main():
                     .agg(**agregacoes_diarias)
                     .reset_index()
                 )
+                df_diario_energia['Mes_Num'] = pd.to_datetime(df_diario_energia['Dia_Data']).dt.month
 
                 if irrad_col:
                     df_irrad_diaria = df.dropna(subset=[irrad_col]).copy()
@@ -1227,8 +1233,6 @@ def main():
                     df_diario_energia['Energia_por_Irradiacao'] = (
                         df_diario_energia['Energia_kWh'] / denominador_irrad
                     )
-                else:
-                    df_diario_energia['Classificacao'] = 'Menor geração (sem ajuste por irradiância)'
 
                 # Dias com menos de 75% da quantidade típica de amostras não entram
                 # na referência nem na classificação de anomalia, pois podem estar incompletos.
@@ -1239,30 +1243,161 @@ def main():
                     df_diario_energia['Dados_Completos'] = False
 
                 if irrad_col:
+                    IRRADIACAO_MINIMA_REFERENCIA = 0.5
                     condicao_referencia = (
                         df_diario_energia['Irradiacao_kWh_m2'].notna()
-                        & (df_diario_energia['Irradiacao_kWh_m2'] >= 0.5)
+                        & (df_diario_energia['Irradiacao_kWh_m2'] >= IRRADIACAO_MINIMA_REFERENCIA)
                         & df_diario_energia['Dados_Completos']
+                        & df_diario_energia['Energia_por_Irradiacao'].notna()
+                        & (df_diario_energia['Energia_por_Irradiacao'] > 0)
                     )
-                    dias_com_irradiacao = df_diario_energia.loc[condicao_referencia]
-                    referencia_indice = dias_com_irradiacao['Energia_por_Irradiacao'].median()
-                    df_diario_energia['Classificacao'] = 'Sem irradiância suficiente'
-                    if pd.notna(referencia_indice) and referencia_indice > 0:
-                        limite_indice = referencia_indice * (1 - limite_amostras / 100)
-                        df_diario_energia.loc[condicao_referencia, 'Classificacao'] = 'Dentro da referência'
-                        condicao_anomalia = (
-                            condicao_referencia
-                            & (df_diario_energia['Energia_por_Irradiacao'] < limite_indice)
+                    dias_com_irradiacao = df_diario_energia.loc[condicao_referencia].copy()
+                    referencia_mediana_global = (
+                        float(dias_com_irradiacao['Energia_por_Irradiacao'].median())
+                        if not dias_com_irradiacao.empty else None
+                    )
+                    referencia_media_global = (
+                        float(dias_com_irradiacao['Energia_por_Irradiacao'].mean())
+                        if not dias_com_irradiacao.empty else None
+                    )
+
+                    metodos_referencia = [
+                        "Mediana do mesmo mês do ano (recomendada)",
+                        "Mediana do histórico completo",
+                        "Média do histórico completo",
+                        "Valor manual"
+                    ]
+                    col_ref, col_sens, col_badge = st.columns([3, 5, 1])
+                    with col_ref:
+                        metodo_referencia = st.selectbox(
+                            "Como definir a referência?",
+                            options=metodos_referencia,
+                            index=0,
+                            key="metodo_referencia_anomalia",
+                            help=(
+                                "A mediana do mesmo mês compara cada mês do calendário com o mesmo mês dos outros anos. "
+                                "Se houver menos de 5 dias válidos naquele mês, usa a mediana global."
+                            )
                         )
-                        df_diario_energia.loc[condicao_anomalia, 'Classificacao'] = 'Possível anomalia'
-                    else:
-                        df_diario_energia.loc[condicao_referencia, 'Classificacao'] = 'Sem referência suficiente'
+                    with col_sens:
+                        limite_amostras = st.slider(
+                            "Sensibilidade para sinalizar desempenho abaixo da referência:",
+                            min_value=10,
+                            max_value=50,
+                            value=20,
+                            step=5,
+                            format="%d",
+                            help=(
+                                "Exemplo: 25% sinaliza quando o índice diário fica abaixo de 75% da referência. "
+                                "Isso não representa uma tolerância oficial do fabricante."
+                            )
+                        )
+                    with col_badge:
+                        st.markdown(
+                            f'<div class="sensitivity-badge">{limite_amostras}%</div>',
+                            unsafe_allow_html=True
+                        )
+
+                    referencia_manual = None
+                    if metodo_referencia == "Valor manual":
+                        valor_padrao_manual = referencia_mediana_global if referencia_mediana_global and referencia_mediana_global > 0 else 0.5
+                        referencia_manual = st.number_input(
+                            "Índice de referência manual (kWh ÷ kWh/m²)",
+                            min_value=0.0001,
+                            max_value=100000.0,
+                            value=float(valor_padrao_manual),
+                            step=0.01,
+                            format="%.4f",
+                            help=(
+                                "Informe o índice energia/irradiação que deseja adotar como meta de comparação. "
+                                "Use um valor obtido de um período comprovadamente saudável ou definido em um estudo técnico."
+                            )
+                        )
+
+                    # A referência é materializada por dia para que cada linha da tabela
+                    # mostre exatamente o valor usado em sua classificação.
+                    df_diario_energia['Referencia_Indice'] = float('nan')
+                    df_diario_energia['Dias_Referencia'] = 0
+                    df_diario_energia['Metodo_Referencia_Usado'] = 'Sem referência suficiente'
+
+                    if metodo_referencia == "Mediana do mesmo mês do ano (recomendada)":
+                        estatisticas_mensais = (
+                            dias_com_irradiacao.groupby('Mes_Num')['Energia_por_Irradiacao']
+                            .agg(['median', 'count'])
+                        )
+                        for mes_num, estatistica in estatisticas_mensais.iterrows():
+                            mascara_mes = df_diario_energia['Mes_Num'] == int(mes_num)
+                            quantidade_mes = int(estatistica['count'])
+                            if quantidade_mes >= 5:
+                                df_diario_energia.loc[mascara_mes, 'Referencia_Indice'] = float(estatistica['median'])
+                                df_diario_energia.loc[mascara_mes, 'Dias_Referencia'] = quantidade_mes
+                                df_diario_energia.loc[mascara_mes, 'Metodo_Referencia_Usado'] = f'Mediana de {quantidade_mes} dias do mesmo mês'
+                            elif referencia_mediana_global is not None:
+                                df_diario_energia.loc[mascara_mes, 'Referencia_Indice'] = referencia_mediana_global
+                                df_diario_energia.loc[mascara_mes, 'Dias_Referencia'] = len(dias_com_irradiacao)
+                                df_diario_energia.loc[mascara_mes, 'Metodo_Referencia_Usado'] = f'Mediana global (fallback: {quantidade_mes} dias no mês)'
+                        # Meses sem nenhuma observação válida também recebem a mediana global, se existir.
+                        meses_sem_linha = ~df_diario_energia['Mes_Num'].isin(estatisticas_mensais.index)
+                        if referencia_mediana_global is not None:
+                            df_diario_energia.loc[meses_sem_linha, 'Referencia_Indice'] = referencia_mediana_global
+                            df_diario_energia.loc[meses_sem_linha, 'Dias_Referencia'] = len(dias_com_irradiacao)
+                            df_diario_energia.loc[meses_sem_linha, 'Metodo_Referencia_Usado'] = 'Mediana global (sem amostra mensal)'
+
+                    elif metodo_referencia == "Mediana do histórico completo":
+                        if referencia_mediana_global is not None:
+                            df_diario_energia['Referencia_Indice'] = referencia_mediana_global
+                            df_diario_energia['Dias_Referencia'] = len(dias_com_irradiacao)
+                            df_diario_energia['Metodo_Referencia_Usado'] = 'Mediana do histórico completo'
+
+                    elif metodo_referencia == "Média do histórico completo":
+                        if referencia_media_global is not None:
+                            df_diario_energia['Referencia_Indice'] = referencia_media_global
+                            df_diario_energia['Dias_Referencia'] = len(dias_com_irradiacao)
+                            df_diario_energia['Metodo_Referencia_Usado'] = 'Média do histórico completo'
+
+                    elif metodo_referencia == "Valor manual":
+                        df_diario_energia['Referencia_Indice'] = float(referencia_manual)
+                        df_diario_energia['Dias_Referencia'] = 0
+                        df_diario_energia['Metodo_Referencia_Usado'] = 'Referência manual definida pelo usuário'
+
+                    df_diario_energia['Limite_Alerta'] = (
+                        df_diario_energia['Referencia_Indice'] * (1 - limite_amostras / 100)
+                    )
+                    df_diario_energia['Desvio_Referencia_pct'] = (
+                        (df_diario_energia['Energia_por_Irradiacao'] / df_diario_energia['Referencia_Indice'] - 1) * 100
+                    )
+
+                    condicao_comparavel = (
+                        df_diario_energia['Irradiacao_kWh_m2'].notna()
+                        & (df_diario_energia['Irradiacao_kWh_m2'] >= IRRADIACAO_MINIMA_REFERENCIA)
+                        & df_diario_energia['Dados_Completos']
+                        & df_diario_energia['Energia_por_Irradiacao'].notna()
+                    )
+                    condicao_com_referencia = (
+                        condicao_comparavel
+                        & df_diario_energia['Referencia_Indice'].notna()
+                        & (df_diario_energia['Referencia_Indice'] > 0)
+                    )
+                    df_diario_energia['Classificacao'] = 'Sem irradiância suficiente'
+                    df_diario_energia.loc[
+                        condicao_comparavel & ~condicao_com_referencia,
+                        'Classificacao'
+                    ] = 'Sem referência suficiente'
+                    df_diario_energia.loc[condicao_com_referencia, 'Classificacao'] = 'Dentro da referência'
+                    condicao_anomalia = (
+                        condicao_com_referencia
+                        & (df_diario_energia['Energia_por_Irradiacao'] < df_diario_energia['Limite_Alerta'])
+                    )
+                    df_diario_energia.loc[condicao_anomalia, 'Classificacao'] = 'Possível anomalia'
+                else:
+                    limite_amostras = 20
+                    df_diario_energia['Classificacao'] = 'Menor geração (sem ajuste por irradiância)'
+
                 df_diario_energia.loc[~df_diario_energia['Dados_Completos'], 'Classificacao'] = 'Dados incompletos'
 
-                menor_dia = df_diario_energia.loc[df_diario_energia['Energia_kWh'].idxmin()] if not df_diario_energia.empty else None
-                maior_dia = df_diario_energia.loc[df_diario_energia['Energia_kWh'].idxmax()] if not df_diario_energia.empty else None
-
-                if menor_dia is not None:
+                if not df_diario_energia.empty:
+                    menor_dia = df_diario_energia.loc[df_diario_energia['Energia_kWh'].idxmin()]
+                    maior_dia = df_diario_energia.loc[df_diario_energia['Energia_kWh'].idxmax()]
                     ka, kb, kc = st.columns(3)
                     with ka:
                         st.metric("Menor geração diária", f"{menor_dia['Energia_kWh']:.2f} kWh", delta=menor_dia['Dia_Data'].strftime('%d/%m/%Y'), delta_color="off")
@@ -1271,6 +1406,30 @@ def main():
                     with kc:
                         qtd_anomalias = int((df_diario_energia['Classificacao'] == 'Possível anomalia').sum())
                         st.metric("Possíveis anomalias", str(qtd_anomalias))
+
+                    if irrad_col:
+                        met_ref_col, met_ref_dias_col, met_irrad_col = st.columns(3)
+                        with met_ref_col:
+                            if metodo_referencia == "Mediana do mesmo mês do ano (recomendada)":
+                                valor_ref_card = f"{referencia_mediana_global:.4f}" if referencia_mediana_global is not None else "N/A"
+                                st.metric("Mediana global de apoio", valor_ref_card)
+                            elif metodo_referencia == "Mediana do histórico completo":
+                                valor_ref_card = f"{referencia_mediana_global:.4f}" if referencia_mediana_global is not None else "N/A"
+                                st.metric("Referência global", valor_ref_card)
+                            elif metodo_referencia == "Média do histórico completo":
+                                valor_ref_card = f"{referencia_media_global:.4f}" if referencia_media_global is not None else "N/A"
+                                st.metric("Referência global", valor_ref_card)
+                            else:
+                                st.metric("Referência manual", f"{referencia_manual:.4f}")
+                        with met_ref_dias_col:
+                            st.metric("Dias válidos para referência", str(len(dias_com_irradiacao)))
+                        with met_irrad_col:
+                            st.metric("Irradiação mínima comparável", "0,50 kWh/m²/dia")
+
+                        st.caption(
+                            f"Método selecionado: **{metodo_referencia}**. Sensibilidade: **{limite_amostras}%**. "
+                            "A referência é um índice relativo da própria série histórica; ela não representa uma meta de fabricante."
+                        )
 
                     df_energia_plot = df_diario_energia.sort_values('Dia_Data')
                     fig_energia_dias = px.bar(
@@ -1292,34 +1451,111 @@ def main():
                         xaxis_title="Dia",
                         yaxis_title="Energia estimada (kWh)",
                         hovermode="x unified",
-                        margin=dict(l=15, r=15, t=45, b=15)
+                        margin=dict(l=15, r=15, t=65, b=15)
                     )
                     exibir_grafico(fig_energia_dias)
 
                     if irrad_col:
+                        # Gráfico específico para tornar visível a referência usada na classificação.
+                        df_indice_plot = df_diario_energia.loc[condicao_com_referencia].sort_values('Dia_Data').copy()
+                        if not df_indice_plot.empty:
+                            fig_indice_ref = go.Figure()
+                            fig_indice_ref.add_trace(go.Scatter(
+                                x=df_indice_plot['Dia_Data'],
+                                y=df_indice_plot['Energia_por_Irradiacao'],
+                                mode='lines+markers',
+                                name='Índice diário observado',
+                                line=dict(color='#2D9CDB', width=2),
+                                marker=dict(size=6),
+                                customdata=df_indice_plot[['Referencia_Indice', 'Limite_Alerta', 'Desvio_Referencia_pct']],
+                                hovertemplate=(
+                                    'Dia: %{x|%d/%m/%Y}<br>Índice observado: %{y:.4f}'
+                                    '<br>Referência: %{customdata[0]:.4f}'
+                                    '<br>Limite de alerta: %{customdata[1]:.4f}'
+                                    '<br>Desvio: %{customdata[2]:.1f}%<extra></extra>'
+                                )
+                            ))
+                            fig_indice_ref.add_trace(go.Scatter(
+                                x=df_indice_plot['Dia_Data'],
+                                y=df_indice_plot['Referencia_Indice'],
+                                mode='lines',
+                                name='Referência aplicada',
+                                line=dict(color='#25A56A', width=2, dash='solid')
+                            ))
+                            fig_indice_ref.add_trace(go.Scatter(
+                                x=df_indice_plot['Dia_Data'],
+                                y=df_indice_plot['Limite_Alerta'],
+                                mode='lines',
+                                name=f'Limite de alerta (-{limite_amostras}%)',
+                                line=dict(color='#E74C3C', width=2, dash='dash')
+                            ))
+                            fig_indice_ref.update_layout(
+                                title="Índice energia/irradiação: dias observados × referência",
+                                xaxis_title="Dia",
+                                yaxis_title="Índice energia/irradiação (kWh ÷ kWh/m²)",
+                                hovermode="x unified",
+                                margin=dict(l=15, r=15, t=65, b=15),
+                                legend_title="Séries"
+                            )
+                            exibir_grafico(fig_indice_ref)
+
                         st.markdown("#### Dias com possível desempenho abaixo da referência")
+                        st.caption(
+                            "A tabela mostra o índice medido, a referência realmente aplicada àquela data e o limite "
+                            "abaixo do qual o dia é sinalizado. Em referências sazonais, o valor pode variar conforme o mês."
+                        )
                         df_suspeitos = df_diario_energia[
                             df_diario_energia['Classificacao'].isin(['Possível anomalia', 'Dados incompletos'])
                         ].copy()
                         if not df_suspeitos.empty:
-                            colunas_tabela = ['Dia_Data', 'Energia_kWh', 'Irradiacao_kWh_m2', 'Energia_por_Irradiacao', 'Amostras', 'Classificacao']
+                            colunas_tabela = [
+                                'Dia_Data', 'Energia_kWh', 'Irradiacao_kWh_m2',
+                                'Energia_por_Irradiacao', 'Referencia_Indice', 'Limite_Alerta',
+                                'Desvio_Referencia_pct', 'Dias_Referencia',
+                                'Metodo_Referencia_Usado', 'Amostras', 'Classificacao'
+                            ]
+                            tabela_suspeitos = df_suspeitos[colunas_tabela].sort_values(
+                                ['Classificacao', 'Desvio_Referencia_pct'],
+                                ascending=[True, True],
+                                na_position='last'
+                            ).rename(columns={
+                                'Dia_Data': 'Dia',
+                                'Energia_kWh': 'Energia (kWh)',
+                                'Irradiacao_kWh_m2': 'Irradiação (kWh/m²)',
+                                'Energia_por_Irradiacao': 'Índice observado',
+                                'Referencia_Indice': 'Referência usada',
+                                'Limite_Alerta': 'Limite de alerta',
+                                'Desvio_Referencia_pct': 'Desvio da referência (%)',
+                                'Dias_Referencia': 'Dias na referência',
+                                'Metodo_Referencia_Usado': 'Método aplicado',
+                                'Amostras': 'Amostras',
+                                'Classificacao': 'Classificação'
+                            })
                             st.dataframe(
-                                df_suspeitos[colunas_tabela].sort_values('Energia_por_Irradiacao', na_position='last'),
+                                tabela_suspeitos,
                                 use_container_width=True,
-                                hide_index=True
+                                hide_index=True,
+                                column_config={
+                                    'Energia (kWh)': st.column_config.NumberColumn(format='%.4f'),
+                                    'Irradiação (kWh/m²)': st.column_config.NumberColumn(format='%.4f'),
+                                    'Índice observado': st.column_config.NumberColumn(format='%.4f'),
+                                    'Referência usada': st.column_config.NumberColumn(format='%.4f'),
+                                    'Limite de alerta': st.column_config.NumberColumn(format='%.4f'),
+                                    'Desvio da referência (%)': st.column_config.NumberColumn(format='%.1f%%')
+                                }
                             )
                         else:
                             st.success("Nenhum dia foi sinalizado pelo critério selecionado.")
                         st.info(
-                            "A classificação é um alerta estatístico, não um diagnóstico de falha. "
-                            "Sombreamento, sujeira, indisponibilidade, diferenças de amostragem e falhas "
-                            "de sensores também podem influenciar o resultado."
+                            "A classificação é um alerta estatístico, não um diagnóstico de falha. Sombreamento, sujeira, "
+                            "indisponibilidade, temperatura, diferenças de amostragem e falhas de sensores também podem "
+                            "influenciar o resultado. Investigue os dias sinalizados antes de concluir que existe defeito."
                         )
                     else:
                         st.warning(
-                            "Não foi identificada uma coluna de irradiância. O painel mostra os dias de "
-                            "menor geração, mas não classifica esses dias como anomalias de desempenho, "
-                            "pois não é possível separar baixa radiação de possível falha usando apenas potência."
+                            "Não foi identificada uma coluna de irradiância. O painel mostra os dias de menor geração, "
+                            "mas não classifica esses dias como anomalias de desempenho, pois não é possível separar "
+                            "baixa radiação de possível falha usando apenas potência."
                         )
                         st.dataframe(
                             df_diario_energia.nsmallest(10, 'Energia_kWh')[['Dia_Data', 'Energia_kWh', 'Amostras', 'Classificacao']],
