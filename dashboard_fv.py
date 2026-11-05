@@ -246,7 +246,8 @@ def aplicar_estilo_interface(tema_visual: str):
         display: block !important;
         opacity: 1 !important;
         visibility: visible !important;
-        top: 7px !important;
+        /* Mantém a barra abaixo do título, sem cobrir o nome do gráfico. */
+        top: 38px !important;
         right: 9px !important;
         z-index: 20 !important;
     }}
@@ -427,7 +428,9 @@ def exibir_grafico(fig):
         title_font=dict(color=texto, size=16),
         legend=dict(font=dict(color=texto), bgcolor="rgba(0,0,0,0)"),
         hoverlabel=dict(bgcolor=hover, font=dict(color=texto)),
-        margin=dict(l=18, r=18, t=72, b=24),
+        # Reserva uma faixa superior para o título e outra para a barra de ferramentas.
+        margin=dict(l=18, r=18, t=104, b=24),
+        title=dict(x=0.02, y=0.99, xanchor="left", yanchor="top"),
     )
     fig.update_xaxes(
         gridcolor=grade,
