@@ -1,3 +1,739 @@
+import io
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Configuração da página
+st.set_page_config(page_title="Monitoramento Fotovoltaico", page_icon="☀️", layout="wide")
+
+# Estilização visual: mantém a estrutura original e acrescenta cores aos cartões.
+st.markdown("""
+    <style>
+    div[data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 750 !important;
+        color: #d9ffe8 !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #b9d8c8 !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, rgba(13, 84, 55, 0.32), rgba(23, 47, 66, 0.42));
+        border: 1px solid rgba(72, 210, 137, 0.30);
+        border-radius: 15px;
+        padding: 13px 15px;
+        box-shadow: 0 5px 18px rgba(0, 0, 0, 0.10);
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 16px;
+    }
+    [data-testid="stSidebar"] {
+        border-right: 1px solid rgba(72, 210, 137, 0.22);
+    }
+    .stAlert {
+        border-radius: 10px;
+    }
+    .explanation-box {
+        background: linear-gradient(135deg, rgba(41, 128, 185, 0.13), rgba(39, 174, 96, 0.09));
+        border-left: 4px solid #2ecc71;
+        padding: 12px 15px;
+        border-radius: 9px;
+        margin-bottom: 15px;
+        font-size: 0.95rem;
+    }
+    .section-intro {
+        padding: 12px 16px;
+        border-radius: 12px;
+        background: linear-gradient(100deg, rgba(25, 135, 84, 0.16), rgba(13, 110, 253, 0.10));
+        border: 1px solid rgba(72, 210, 137, 0.22);
+        margin: 5px 0 14px 0;
+    }
+    .temperature-panel {
+        padding: 17px 19px;
+        border-radius: 16px;
+        background: linear-gradient(115deg, rgba(13, 110, 253, 0.20), rgba(32, 201, 151, 0.16), rgba(255, 193, 7, 0.13));
+        border: 1px solid rgba(105, 190, 220, 0.35);
+        margin: 8px 0 15px 0;
+    }
+    .temperature-icon {
+        font-size: 2.25rem;
+        line-height: 1.2;
+    }
+    .temperature-main {
+        font-size: 1.55rem;
+        font-weight: 750;
+    }
+    .temperature-sub {
+        color: #a9c8d9;
+        font-size: 0.90rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+@st.cache_data(show_spinner=False)
+def load_and_clean_data(file_bytes: bytes, file_name: str):
+    """Lê, normaliza e prepara os dados da planilha enviada."""
+    try:
+        buffer = io.BytesIO(file_bytes)
+        nome = file_name.lower()
+
+        if nome.endswith('.csv'):
+            # Primeiro tenta o padrão mais comum em planilhas brasileiras.
+            df = pd.read_csv(
+                buffer,
+                sep=';',
+                decimal=',',
+                encoding='utf-8-sig'
+            )
+
+            # Se tudo veio em uma coluna, tenta CSV separado por vírgula.
+            if len(df.columns) == 1:
+                buffer.seek(0)
+                df = pd.read_csv(
+                    buffer,
+                    sep=',',
+                    decimal='.',
+                    encoding='utf-8-sig'
+                )
+        else:
+            df = pd.read_excel(buffer)
+
+        if df.empty:
+            st.error("A planilha foi lida, mas não contém linhas de dados.")
+            return None, None
+
+        # Localiza a primeira coluna que aparenta conter data/hora.
+        col_data = [
+            col for col in df.columns
+            if any(termo in str(col).lower() for termo in ('data', 'hora', 'date', 'time'))
+        ]
+        if not col_data:
+            st.error("Não foi possível identificar a coluna de Data e Hora.")
+            return None, None
+
+        data_col = col_data[0]
+        try:
+            df[data_col] = pd.to_datetime(
+                df[data_col], dayfirst=True, format='mixed', errors='coerce'
+            )
+        except (TypeError, ValueError):
+            # Compatibilidade com versões de pandas que não aceitam format='mixed'.
+            df[data_col] = pd.to_datetime(
+                df[data_col], dayfirst=True, errors='coerce'
+            )
+
+        df = (
+            df.dropna(subset=[data_col])
+              .sort_values(by=data_col)
+              .reset_index(drop=True)
+        )
+        if df.empty:
+            st.error("Nenhuma data/hora válida foi encontrada na planilha.")
+            return None, None
+
+        # Componentes de data usados nos filtros e agrupamentos.
+        df['Ano_Num'] = df[data_col].dt.year
+        df['Mes_Num'] = df[data_col].dt.month
+        df['Dia_Data'] = df[data_col].dt.date
+        df['Hora_Tempo'] = df[data_col].dt.time
+        df['Dia_Do_Mes'] = df[data_col].dt.day
+        df['Ano_Mes_Sort'] = df[data_col].dt.to_period('M').dt.to_timestamp()
+
+        df['Semestre_Num'] = df['Mes_Num'].apply(lambda mes: 1 if mes <= 6 else 2)
+        df['Semestre_Nome'] = df['Semestre_Num'].astype(str) + 'º Semestre'
+
+        meses_pt = {
+            1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
+            7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'
+        }
+        df['Nome_Mes_Formatado'] = df['Mes_Num'].map(meses_pt).fillna('Indefinido')
+        df['Ano_Mes_Texto'] = df['Nome_Mes_Formatado'] + '/' + df['Ano_Num'].astype(str)
+
+        cols_reservadas = {
+            data_col, 'Ano_Num', 'Mes_Num', 'Dia_Data', 'Hora_Tempo',
+            'Dia_Do_Mes', 'Nome_Mes_Formatado', 'Semestre_Num',
+            'Semestre_Nome', 'Ano_Mes_Sort', 'Ano_Mes_Texto'
+        }
+
+        # Converte as grandezas para números sem trocar espaços por pontos.
+        for col in df.columns:
+            if col in cols_reservadas or pd.api.types.is_numeric_dtype(df[col]):
+                continue
+
+            valores = df[col].astype('string').str.strip()
+            valores = valores.str.replace('\u00a0', '', regex=False)
+            valores = valores.str.replace(' ', '', regex=False)
+
+            # Trata números no padrão brasileiro, por exemplo: 1.234,56.
+            tem_virgula = valores.str.contains(',', na=False)
+            valores.loc[tem_virgula] = (
+                valores.loc[tem_virgula]
+                .str.replace('.', '', regex=False)
+                .str.replace(',', '.', regex=False)
+            )
+            df[col] = pd.to_numeric(valores, errors='coerce')
+
+        var_cols = [col for col in df.columns if col not in cols_reservadas]
+        if not var_cols:
+            st.error("Não encontrei colunas numéricas para gerar os indicadores e gráficos.")
+            return None, None
+
+        return df, data_col
+
+    except Exception as e:
+        st.error(f"Erro ao processar o arquivo: {e}")
+        return None, None
+
+def criar_grafico_base(df, x_col, y_col, titulo, tipo_grafico, cor='#2980B9'):
+    if tipo_grafico == "Linhas":
+        fig = px.line(df, x=x_col, y=y_col, title=titulo, color_discrete_sequence=[cor])
+    elif tipo_grafico == "Colunas":
+        fig = px.bar(df, x=x_col, y=y_col, title=titulo, color_discrete_sequence=[cor])
+    elif tipo_grafico == "Pontos":
+        fig = px.scatter(df, x=x_col, y=y_col, title=titulo, color_discrete_sequence=[cor])
+    else:
+        fig = px.line(df, x=x_col, y=y_col, markers=True, title=titulo, color_discrete_sequence=[cor])
+    
+    fig.update_layout(hovermode="x unified", margin=dict(l=15, r=15, t=35, b=15))
+    return fig
+
+def main():
+    st.title("☀️ Painel de Análise de Planta Fotovoltaica")
+
+    # --- BARRA LATERAL ---
+    st.sidebar.header("📁 Importação de Dados")
+    st.sidebar.caption(f"Aplicação: Streamlit {st.__version__}")
+    uploaded_file = st.sidebar.file_uploader("Carregue sua planilha (.csv, .xls, .xlsx)", type=['csv', 'xlsx', 'xls'])
+
+    if uploaded_file is not None:
+        with st.spinner("Carregando dados..."):
+            df, col_data = load_and_clean_data(uploaded_file.getvalue(), uploaded_file.name)
+            
+        if df is not None:
+            cols_reservadas = [col_data, 'Ano_Num', 'Mes_Num', 'Dia_Data', 'Hora_Tempo', 'Dia_Do_Mes', 
+                               'Nome_Mes_Formatado', 'Semestre_Num', 'Semestre_Nome', 'Ano_Mes_Sort', 'Ano_Mes_Texto']
+            var_cols = [c for c in df.columns if c not in cols_reservadas]
+
+            st.sidebar.divider()
+            st.sidebar.header("⚙️ Configurações Visuais")
+            variavel_y = st.sidebar.selectbox("Variável Principal (Eixo Y):", var_cols)
+            modo_exibicao = st.sidebar.radio("Layout dos Gráficos:", ["📊 Modo Grid (3 Simultâneos)", "🔍 Modo Foco (Ampliado)"])
+            tipo_grafico = st.sidebar.selectbox("Estilo do Gráfico:", ["Pontos e Linhas", "Linhas", "Colunas", "Pontos"])
+
+            # --- SAÚDE DOS DADOS ---
+            total_celulas = df[var_cols].size
+            celulas_vazias = df[var_cols].isnull().sum().sum()
+            pct_saude = ((total_celulas - celulas_vazias) / total_celulas) * 100 if total_celulas > 0 else 100
+
+            if celulas_vazias > 0:
+                st.warning(f"⚠️ **Aviso de Integridade:** Foram identificadas **{celulas_vazias} células em branco/nulas** na planilha ({pct_saude:.1f}% de preenchimento). Os cálculos e gráficos tratam automaticamente essas lacunas sem travar o painel.")
+            else:
+                st.success("✅ **Qualidade dos Dados:** Planilha 100% preenchida (sem células em branco).")
+
+            # --- INDICADORES GERAIS COM DATAS DOS PICOS ---
+            st.markdown("### 📊 Indicadores Gerais do Período")
+            potencia_col = next((c for c in var_cols if 'power' in c.lower() or 'potência' in c.lower() or 'potencia' in c.lower()), None)
+            temp_mod_col = next((c for c in var_cols if 'temp' in c.lower() and ('mod' in c.lower() or 'fv' in c.lower())), None)
+            irrad_col = next((c for c in var_cols if 'piranometro' in c.lower() or 'irradiância' in c.lower() or 'g' == c.lower() or 'irrad' in c.lower()), None)
+            
+            # Busca da data exata em que ocorreu o valor máximo
+            def obter_data_maxima(col_nome):
+                if col_nome and not df[col_nome].dropna().empty:
+                    idx_max = df[col_nome].idxmax()
+                    return df.loc[idx_max, col_data].strftime('%d/%m/%Y')
+                return "N/A"
+
+            data_pot_max = obter_data_maxima(potencia_col)
+            data_temp_max = obter_data_maxima(temp_mod_col)
+            data_irrad_max = obter_data_maxima(irrad_col)
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                with st.container(border=True):
+                    val_p = f"{df[potencia_col].max():.2f} W" if potencia_col else "N/A"
+                    st.metric("Potência Máxima", val_p, delta=f"📅 {data_pot_max}", delta_color="off")
+            with c2:
+                with st.container(border=True):
+                    val_e = f"{(df[potencia_col].sum() * 0.25) / 1000:.2f} kWh" if potencia_col else "N/A"
+                    st.metric("Energia Estimada Total", val_e)
+            with c3:
+                with st.container(border=True):
+                    val_t = f"{df[temp_mod_col].max():.1f} °C" if temp_mod_col else "N/A"
+                    st.metric("Temp. Máxima Módulo", val_t, delta=f"📅 {data_temp_max}", delta_color="off")
+            with c4:
+                with st.container(border=True):
+                    val_i = f"{df[irrad_col].max():.1f} W/m²" if irrad_col else "N/A"
+                    st.metric("Irradiância Máxima", val_i, delta=f"📅 {data_irrad_max}", delta_color="off")
+
+            # --- DESTAQUES DE PERFORMANCE ---
+            st.markdown(f"### 🏆 Destaques de Maior Valor para: `{variavel_y}`")
+            
+            df_dia_grp = df.groupby('Dia_Data')[variavel_y].mean().reset_index()
+            top_dia_row = (df_dia_grp.loc[df_dia_grp[variavel_y].idxmax()]
+                           if not df_dia_grp.empty and df_dia_grp[variavel_y].notna().any()
+                           else None)
+
+            df_mes_grp_total = df.groupby(['Ano_Num', 'Mes_Num', 'Nome_Mes_Formatado'])[variavel_y].mean().reset_index()
+            top_mes_row = (df_mes_grp_total.loc[df_mes_grp_total[variavel_y].idxmax()]
+                           if not df_mes_grp_total.empty and df_mes_grp_total[variavel_y].notna().any()
+                           else None)
+
+            ct1, ct2 = st.columns(2)
+            with ct1:
+                with st.container(border=True):
+                    if top_dia_row is not None:
+                        st.metric("🥇 Dia de Maior Média", f"{top_dia_row['Dia_Data'].strftime('%d/%m/%Y')}", f"Média: {top_dia_row[variavel_y]:.2f}")
+                    else:
+                        st.metric("🥇 Dia de Maior Média", "N/A")
+            with ct2:
+                with st.container(border=True):
+                    if top_mes_row is not None:
+                        label_mes = f"{top_mes_row['Nome_Mes_Formatado']}/{int(top_mes_row['Ano_Num'])}"
+                        st.metric("🏆 Mês de Maior Média", label_mes, f"Média: {top_mes_row[variavel_y]:.2f}")
+                    else:
+                        st.metric("🏆 Mês de Maior Média", "N/A")
+
+            st.divider()
+
+            # --- GRÁFICO HISTÓRICO COMPLETO (TODOS OS MESES DO ARQUIVO) ---
+            st.markdown(f"### 🌐 Visão Histórica Completa do Arquivo (`{variavel_y}`)")
+            st.caption("Visão contínua de todos os meses contidos na planilha importada, organizados cronologicamente.")
+
+            df_hist_grp = df.groupby(['Ano_Mes_Sort', 'Ano_Mes_Texto'])[variavel_y].mean().reset_index().sort_values('Ano_Mes_Sort')
+            
+            fig_hist = criar_grafico_base(
+                df_hist_grp, 
+                x_col='Ano_Mes_Texto', 
+                y_col=variavel_y, 
+                titulo=f"Evolução Média Mensal de {variavel_y} (Todos os Meses do Arquivo)", 
+                tipo_grafico=tipo_grafico, 
+                cor='#8E44AD'
+            )
+            fig_hist.update_layout(xaxis=dict(title="Mês/Ano"), yaxis=dict(title=variavel_y))
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+            st.divider()
+
+            # --- GRÁFICOS INTEGRADOS (SEMESTRAL, MENSAL, DIÁRIO) ---
+            st.markdown("## 📈 Painel Integrado de Gráficos")
+            anos_disponiveis = sorted(df['Ano_Num'].dropna().unique())
+
+            if modo_exibicao == "📊 Modo Grid (3 Simultâneos)":
+                g1, g2, g3 = st.columns(3)
+                
+                # CARD 1: SEMESTRAL
+                with g1:
+                    with st.container(border=True):
+                        st.markdown("#### 🗓️ Visão Semestral")
+                        cs1, cs2 = st.columns(2)
+                        with cs1:
+                            ano_semestral = st.selectbox("Ano:", anos_disponiveis, key='k_ano_semestral')
+                        semestres_disp = sorted(df[df['Ano_Num'] == ano_semestral]['Semestre_Nome'].dropna().unique())
+                        with cs2:
+                            semestre_sel = st.selectbox("Semestre:", semestres_disp, key='k_semestre_semestral')
+                        
+                        df_sem = df[(df['Ano_Num'] == ano_semestral) & (df['Semestre_Nome'] == semestre_sel)]
+                        df_sem_grp = df_sem.groupby(['Mes_Num', 'Nome_Mes_Formatado'])[variavel_y].mean().reset_index().sort_values('Mes_Num')
+                        fig_sem = criar_grafico_base(df_sem_grp, 'Nome_Mes_Formatado', variavel_y, f"Média Mensal ({semestre_sel}/{ano_semestral})", tipo_grafico, '#E67E22')
+                        st.plotly_chart(fig_sem, use_container_width=True)
+
+                # CARD 2: MENSAL
+                with g2:
+                    with st.container(border=True):
+                        st.markdown("#### 📆 Visão Mensal")
+                        cm1, cm2 = st.columns(2)
+                        with cm1:
+                            ano_mensal = st.selectbox("Ano:", anos_disponiveis, key='k_ano_mensal')
+                        meses_disp = sorted(df[df['Ano_Num'] == ano_mensal]['Mes_Num'].dropna().unique())
+                        with cm2:
+                            mes_mensal = st.selectbox("Mês:", meses_disp, key='k_mes_mensal')
+                        
+                        df_mes = df[(df['Ano_Num'] == ano_mensal) & (df['Mes_Num'] == mes_mensal)]
+                        df_mes_grp = df_mes.groupby('Dia_Do_Mes')[variavel_y].mean().reset_index()
+                        fig_mes = criar_grafico_base(df_mes_grp, 'Dia_Do_Mes', variavel_y, f"Média Diária ({mes_mensal}/{ano_mensal})", tipo_grafico, '#2980B9')
+                        fig_mes.update_layout(xaxis=dict(tickmode='linear', dtick=1))
+                        st.plotly_chart(fig_mes, use_container_width=True)
+
+                # CARD 3: DIÁRIO
+                with g3:
+                    with st.container(border=True):
+                        st.markdown("#### 🕐 Visão Diária")
+                        dias_disp = sorted(df['Dia_Data'].dropna().unique())
+                        dia_diario = st.selectbox("Data:", dias_disp, key='k_dia_diario')
+                        
+                        df_dia = df[df['Dia_Data'] == dia_diario].sort_values(by=col_data)
+                        fig_dia = criar_grafico_base(df_dia, col_data, variavel_y, f"Intradiário ({dia_diario.strftime('%d/%m/%Y')})", tipo_grafico, '#27AE60')
+                        st.plotly_chart(fig_dia, use_container_width=True)
+
+            else:
+                # MODO FOCO (AMPLIADO)
+                with st.container(border=True):
+                    st.markdown("#### 🔍 Selecione o Gráfico para Ampliar")
+                    opcao_foco = st.radio("Gráfico em Destaque:", ["🗓️ Semestral", "📆 Mensal", "🕐 Diário"], horizontal=True)
+                    
+                    if "Semestral" in opcao_foco:
+                        cf1, cf2 = st.columns(2)
+                        with cf1:
+                            ano_semestral = st.selectbox("Ano:", anos_disponiveis, key='foco_ano_s')
+                        semestres_disp = sorted(df[df['Ano_Num'] == ano_semestral]['Semestre_Nome'].dropna().unique())
+                        with cf2:
+                            semestre_sel = st.selectbox("Semestre:", semestres_disp, key='foco_semestre')
+                        df_sem = df[(df['Ano_Num'] == ano_semestral) & (df['Semestre_Nome'] == semestre_sel)]
+                        df_sem_grp = df_sem.groupby(['Mes_Num', 'Nome_Mes_Formatado'])[variavel_y].mean().reset_index().sort_values('Mes_Num')
+                        fig_sem = criar_grafico_base(df_sem_grp, 'Nome_Mes_Formatado', variavel_y, f"Evolução Semestral ({semestre_sel}/{ano_semestral})", tipo_grafico, '#E67E22')
+                        st.plotly_chart(fig_sem, use_container_width=True)
+                    elif "Mensal" in opcao_foco:
+                        cf1, cf2 = st.columns(2)
+                        with cf1:
+                            ano_mensal = st.selectbox("Ano:", anos_disponiveis, key='foco_ano_m')
+                        meses_disp = sorted(df[df['Ano_Num'] == ano_mensal]['Mes_Num'].dropna().unique())
+                        with cf2:
+                            mes_mensal = st.selectbox("Mês:", meses_disp, key='foco_mes')
+                        df_mes = df[(df['Ano_Num'] == ano_mensal) & (df['Mes_Num'] == mes_mensal)]
+                        df_mes_grp = df_mes.groupby('Dia_Do_Mes')[variavel_y].mean().reset_index()
+                        fig_mes = criar_grafico_base(df_mes_grp, 'Dia_Do_Mes', variavel_y, f"Evolução Mensal ({mes_mensal}/{ano_mensal})", tipo_grafico, '#2980B9')
+                        st.plotly_chart(fig_mes, use_container_width=True)
+                    else:
+                        dias_disp = sorted(df['Dia_Data'].dropna().unique())
+                        dia_diario = st.selectbox("Data:", dias_disp, key='foco_dia')
+                        df_dia = df[df['Dia_Data'] == dia_diario].sort_values(by=col_data)
+                        fig_dia = criar_grafico_base(df_dia, col_data, variavel_y, f"Evolução Diária ({dia_diario.strftime('%d/%m/%Y')})", tipo_grafico, '#27AE60')
+                        st.plotly_chart(fig_dia, use_container_width=True)
+
+            st.divider()
+
+            # --- SEÇÃO DO GRÁFICO DE PIZZA / ROSCA E EXPLICAÇÃO ---
+            st.markdown(f"### 🍕 Distribuição Média Mensal de `{variavel_y}`")
+            
+            exp_col, pie_col = st.columns([1, 1.2])
+            
+            with exp_col:
+                st.markdown("""
+                <div class="explanation-box">
+                    <h4>💡 Como interpretar este gráfico?</h4>
+                    <p>Este gráfico de rosca representa a <b>proporção percentual</b> que cada mês representa no valor médio acumulado da variável selecionada.</p>
+                    <ul>
+                        <li><b>Fatias Maiores:</b> Indicam os meses em que a variável analisada (ex: geração, irradiância ou tensão) operou com médias mais elevadas.</li>
+                        <li><b>Fatias Menores:</b> Apontam meses de baixa produção ou períodos com maior incidência de nebulosidade e manutenções.</li>
+                        <li><b>Interatividade:</b> Passe o ponteiro do mouse sobre qualquer fatia para consultar o nome do mês e o valor médio exato.</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with pie_col:
+                with st.container(border=True):
+                    df_pie_grp = df.groupby('Nome_Mes_Formatado')[variavel_y].mean().reset_index()
+                    df_pie_grp = df_pie_grp.dropna(subset=[variavel_y])
+                    fig_pie = px.pie(
+                        df_pie_grp, 
+                        values=variavel_y, 
+                        names='Nome_Mes_Formatado', 
+                        hole=0.4,
+                        title=f"Participação Percentual por Mês (`{variavel_y}`)",
+                        color_discrete_sequence=px.colors.qualitative.Set3
+                    )
+                    fig_pie.update_traces(textinfo='percent+label')
+                    fig_pie.update_layout(margin=dict(l=10, r=10, t=35, b=10))
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+            st.divider()
+
+            # --- COMPARAÇÃO MULTI-MESES NO MESMO GRÁFICO ---
+            st.markdown("### ⚔️ Comparação entre Diferentes Meses")
+            st.caption("Selecione dois ou mais meses para sobrepor as curvas de média diária no mesmo gráfico.")
+            
+            df['Ano_Mes_Label'] = df['Nome_Mes_Formatado'] + '/' + df['Ano_Num'].astype(str)
+            meses_opcoes = sorted(df['Ano_Mes_Label'].unique())
+            
+            default_meses = meses_opcoes[:2] if len(meses_opcoes) >= 2 else meses_opcoes
+            meses_selecionados = st.multiselect(
+                "Escolha os meses para comparar:", 
+                options=meses_opcoes, 
+                default=default_meses
+            )
+            
+            if meses_selecionados:
+                df_comp_meses = df[df['Ano_Mes_Label'].isin(meses_selecionados)]
+                df_comp_grp = df_comp_meses.groupby(['Ano_Mes_Label', 'Dia_Do_Mes'])[variavel_y].mean().reset_index()
+                
+                fig_multi_mes = px.line(
+                    df_comp_grp, x='Dia_Do_Mes', y=variavel_y, color='Ano_Mes_Label',
+                    title=f"Curvas Comparativas de `{variavel_y}` entre Meses (Dia 1 ao 31)",
+                    markers=True
+                )
+                fig_multi_mes.update_layout(xaxis=dict(title="Dia do Mês", tickmode='linear', dtick=1), hovermode="x unified")
+                st.plotly_chart(fig_multi_mes, use_container_width=True)
+
+            st.divider()
+
+            # --- COMPARAÇÃO MULTI-GRANDEZAS / VARIÁVEIS (ATÉ 3) ---
+            st.markdown("### 🔄 Comparação entre Diferentes Grandezas Físicas")
+            st.caption("Compare a grandeza principal com até 3 outras variáveis no mesmo dia.")
+            
+            dias_disp = sorted(df['Dia_Data'].dropna().unique())
+            dia_comp_var = st.selectbox("Data para Análise das Grandezas:", dias_disp, key='dia_comp_var')
+            df_dia_comp = df[df['Dia_Data'] == dia_comp_var].sort_values(by=col_data)
+            
+            var_opcoes = [c for c in var_cols if c != variavel_y]
+            vars_comparacao = st.multiselect(
+                "Selecione até 3 grandezas secundárias para comparar:", 
+                options=var_opcoes, 
+                max_selections=3
+            )
+
+            if vars_comparacao:
+                fig_comp = make_subplots(specs=[[{"secondary_y": True}]])
+                fig_comp.add_trace(go.Scatter(x=df_dia_comp[col_data], y=df_dia_comp[variavel_y], name=f"Principal: {variavel_y}", line=dict(color='#27AE60', width=3)), secondary_y=False)
+                
+                cores_sec = ['#E74C3C', '#8E44AD', '#F39C12']
+                for idx, v_sec in enumerate(vars_comparacao):
+                    fig_comp.add_trace(go.Scatter(x=df_dia_comp[col_data], y=df_dia_comp[v_sec], name=v_sec, line=dict(color=cores_sec[idx % len(cores_sec)], width=2, dash='dot')), secondary_y=True)
+                
+                fig_comp.update_layout(title=f"Comparação de Grandezas em {dia_comp_var.strftime('%d/%m/%Y')}", hovermode='x unified')
+                fig_comp.update_yaxes(title_text=f"<b>{variavel_y}</b>", secondary_y=False)
+                fig_comp.update_yaxes(title_text="<b>Grandezas Secundárias</b>", secondary_y=True)
+                st.plotly_chart(fig_comp, use_container_width=True)
+
+            # --- NOVAS ANÁLISES: COMPARAÇÃO ENTRE DIAS E ANOS ---
+            # Esta seção é adicional. Os gráficos de sobreposição já existentes
+            # (comparação entre meses e comparação entre grandezas) foram mantidos.
+            st.divider()
+            st.markdown("## 📅 Comparações adicionais de períodos")
+            st.markdown(
+                '<div class="section-intro">Compare dias específicos pela curva ao longo do dia '
+                'e compare anos pela evolução mensal. Estas análises são independentes dos gráficos '
+                'de sobreposição que já existiam no painel.</div>',
+                unsafe_allow_html=True
+            )
+
+            tab_dias, tab_anos = st.tabs(["🗓️ Comparar dias", "📆 Comparar anos"])
+
+            with tab_dias:
+                st.caption(
+                    "Selecione dois ou mais dias para comparar o comportamento intradiário "
+                    "da variável escolhida na barra lateral."
+                )
+                dias_comparacao = sorted(df['Dia_Data'].dropna().unique())
+                padrao_dias = dias_comparacao[-2:] if len(dias_comparacao) >= 2 else dias_comparacao
+                dias_selecionados = st.multiselect(
+                    "Dias para comparar:",
+                    options=dias_comparacao,
+                    default=padrao_dias,
+                    format_func=lambda d: d.strftime('%d/%m/%Y'),
+                    key="novos_dias_comparacao"
+                )
+
+                if len(dias_selecionados) >= 2:
+                    df_dias_novo = df[df['Dia_Data'].isin(dias_selecionados)].copy()
+                    df_dias_novo['Horario_Comparacao'] = df_dias_novo[col_data].dt.strftime('%H:%M')
+                    df_dias_novo['Dia_Comparacao'] = df_dias_novo['Dia_Data'].apply(
+                        lambda d: d.strftime('%d/%m/%Y')
+                    )
+                    df_dias_novo_grp = (
+                        df_dias_novo.groupby(['Dia_Comparacao', 'Horario_Comparacao'], as_index=False)[variavel_y]
+                        .mean()
+                    )
+                    fig_dias_novo = px.line(
+                        df_dias_novo_grp,
+                        x='Horario_Comparacao',
+                        y=variavel_y,
+                        color='Dia_Comparacao',
+                        markers=True,
+                        title=f"Comparação intradiária de {variavel_y}"
+                    )
+                    fig_dias_novo.update_layout(
+                        xaxis_title="Horário",
+                        yaxis_title=variavel_y,
+                        hovermode="x unified",
+                        legend_title="Dia",
+                        margin=dict(l=15, r=15, t=45, b=15)
+                    )
+                    st.plotly_chart(fig_dias_novo, use_container_width=True)
+                elif len(dias_selecionados) == 1:
+                    st.info("Selecione pelo menos dois dias para realizar a comparação.")
+                else:
+                    st.info("Selecione os dias que deseja comparar.")
+
+            with tab_anos:
+                st.caption(
+                    "Compare a evolução dos meses entre anos diferentes. Quando existe uma coluna "
+                    "de potência, o gráfico utiliza energia mensal estimada em kWh, considerando "
+                    "o intervalo de amostragem de 15 minutos já adotado no cálculo original."
+                )
+                anos_para_comparar = sorted(df['Ano_Num'].dropna().unique())
+                padrao_anos = anos_para_comparar[-2:] if len(anos_para_comparar) >= 2 else anos_para_comparar
+                anos_selecionados = st.multiselect(
+                    "Anos para comparar:",
+                    options=anos_para_comparar,
+                    default=padrao_anos,
+                    key="novos_anos_comparacao"
+                )
+
+                if len(anos_selecionados) >= 2:
+                    df_anos_novo = df[df['Ano_Num'].isin(anos_selecionados)].copy()
+                    if potencia_col:
+                        df_anos_novo['_Energia_Intervalo_kWh'] = df_anos_novo[potencia_col] * 0.25 / 1000
+                        df_anos_grp = (
+                            df_anos_novo.groupby(['Ano_Num', 'Mes_Num'], as_index=False)['_Energia_Intervalo_kWh']
+                            .sum(min_count=1)
+                        )
+                        df_anos_grp = df_anos_grp.rename(columns={'_Energia_Intervalo_kWh': 'Energia mensal estimada (kWh)'})
+                        coluna_ano_y = 'Energia mensal estimada (kWh)'
+                        titulo_ano = "Energia mensal estimada por ano"
+                        eixo_y_ano = "Energia (kWh)"
+                    else:
+                        df_anos_grp = (
+                            df_anos_novo.groupby(['Ano_Num', 'Mes_Num'], as_index=False)[variavel_y]
+                            .mean()
+                        )
+                        coluna_ano_y = variavel_y
+                        titulo_ano = f"Média mensal de {variavel_y} por ano"
+                        eixo_y_ano = variavel_y
+
+                    meses_nomes = {
+                        1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
+                        7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'
+                    }
+                    df_anos_grp['Mês'] = df_anos_grp['Mes_Num'].map(meses_nomes)
+                    df_anos_grp['Ano'] = df_anos_grp['Ano_Num'].astype(int).astype(str)
+                    fig_anos_novo = px.line(
+                        df_anos_grp,
+                        x='Mes_Num',
+                        y=coluna_ano_y,
+                        color='Ano',
+                        markers=True,
+                        title=titulo_ano
+                    )
+                    fig_anos_novo.update_layout(
+                        xaxis=dict(
+                            title="Mês",
+                            tickmode="array",
+                            tickvals=list(range(1, 13)),
+                            ticktext=[meses_nomes[m] for m in range(1, 13)]
+                        ),
+                        yaxis_title=eixo_y_ano,
+                        hovermode="x unified",
+                        legend_title="Ano",
+                        margin=dict(l=15, r=15, t=45, b=15)
+                    )
+                    st.plotly_chart(fig_anos_novo, use_container_width=True)
+                elif len(anos_selecionados) == 1:
+                    st.info("Selecione pelo menos dois anos para realizar a comparação.")
+                else:
+                    st.info("Selecione os anos que deseja comparar.")
+
+            # --- DETECÇÃO DE DIAS COM BAIXA GERAÇÃO / POSSÍVEIS ANOMALIAS ---
+            st.divider()
+            st.markdown("## 🚨 Análise de geração e possíveis anomalias")
+            st.caption(
+                "A análise usa a potência registrada e estima a energia diária. Quando há irradiância, "
+                "também compara a energia com a radiação recebida para evitar classificar automaticamente "
+                "um dia nublado como falha da planta."
+            )
+
+            if potencia_col:
+                limite_amostras = st.slider(
+                    "Sensibilidade para sinalizar desempenho abaixo da referência:",
+                    min_value=10,
+                    max_value=50,
+                    value=20,
+                    step=5,
+                    format="%d%%",
+                    help="É um critério indicativo: sinaliza dias cujo indicador energia/irradiação ficou abaixo da mediana de referência por esta porcentagem."
+                )
+
+                df_anomalia_base = df.dropna(subset=[potencia_col]).copy()
+                df_anomalia_base['_Energia_Intervalo_kWh'] = df_anomalia_base[potencia_col] * 0.25 / 1000
+                agregacoes_diarias = {
+                    'Energia_kWh': ('_Energia_Intervalo_kWh', lambda s: s.sum(min_count=1)),
+                    'Amostras': (potencia_col, 'count'),
+                    'Potencia_Media': (potencia_col, 'mean'),
+                    'Potencia_Maxima': (potencia_col, 'max')
+                }
+                df_diario_energia = (
+                    df_anomalia_base.groupby('Dia_Data')
+                    .agg(**agregacoes_diarias)
+                    .reset_index()
+                )
+
+                if irrad_col:
+                    df_irrad_diaria = df.dropna(subset=[irrad_col]).copy()
+                    # Irradiância (W/m²) integrada em intervalos de 15 min -> kWh/m².
+                    df_irrad_diaria['_Irradiacao_Intervalo_kWh_m2'] = df_irrad_diaria[irrad_col] * 0.25 / 1000
+                    df_irrad_diaria = (
+                        df_irrad_diaria.groupby('Dia_Data')['_Irradiacao_Intervalo_kWh_m2']
+                        .sum(min_count=1)
+                        .reset_index(name='Irradiacao_kWh_m2')
+                    )
+                    df_diario_energia = df_diario_energia.merge(df_irrad_diaria, on='Dia_Data', how='left')
+                    denominador_irrad = df_diario_energia['Irradiacao_kWh_m2'].where(
+                        df_diario_energia['Irradiacao_kWh_m2'] > 0
+                    )
+                    df_diario_energia['Energia_por_Irradiacao'] = (
+                        df_diario_energia['Energia_kWh'] / denominador_irrad
+                    )
+                else:
+                    df_diario_energia['Classificacao'] = 'Menor geração (sem ajuste por irradiância)'
+
+                # Dias com menos de 75% da quantidade típica de amostras não entram
+                # na referência nem na classificação de anomalia, pois podem estar incompletos.
+                amostras_tipicas = df_diario_energia['Amostras'].median()
+                if pd.notna(amostras_tipicas) and amostras_tipicas > 0:
+                    df_diario_energia['Dados_Completos'] = df_diario_energia['Amostras'] >= (0.75 * amostras_tipicas)
+                else:
+                    df_diario_energia['Dados_Completos'] = False
+
+                if irrad_col:
+                    condicao_referencia = (
+                        df_diario_energia['Irradiacao_kWh_m2'].notna()
+                        & (df_diario_energia['Irradiacao_kWh_m2'] >= 0.5)
+                        & df_diario_energia['Dados_Completos']
+                    )
+                    dias_com_irradiacao = df_diario_energia.loc[condicao_referencia]
+                    referencia_indice = dias_com_irradiacao['Energia_por_Irradiacao'].median()
+                    df_diario_energia['Classificacao'] = 'Sem irradiância suficiente'
+                    if pd.notna(referencia_indice) and referencia_indice > 0:
+                        limite_indice = referencia_indice * (1 - limite_amostras / 100)
+                        df_diario_energia.loc[condicao_referencia, 'Classificacao'] = 'Dentro da referência'
+                        condicao_anomalia = (
+                            condicao_referencia
+                            & (df_diario_energia['Energia_por_Irradiacao'] < limite_indice)
+                        )
+                        df_diario_energia.loc[condicao_anomalia, 'Classificacao'] = 'Possível anomalia'
+                    else:
+                        df_diario_energia.loc[condicao_referencia, 'Classificacao'] = 'Sem referência suficiente'
+                df_diario_energia.loc[~df_diario_energia['Dados_Completos'], 'Classificacao'] = 'Dados incompletos'
+
+                menor_dia = df_diario_energia.loc[df_diario_energia['Energia_kWh'].idxmin()] if not df_diario_energia.empty else None
+                maior_dia = df_diario_energia.loc[df_diario_energia['Energia_kWh'].idxmax()] if not df_diario_energia.empty else None
+
+                if menor_dia is not None:
+                    ka, kb, kc = st.columns(3)
+                    with ka:
+                        st.metric("Menor geração diária", f"{menor_dia['Energia_kWh']:.2f} kWh", delta=menor_dia['Dia_Data'].strftime('%d/%m/%Y'), delta_color="off")
+                    with kb:
+                        st.metric("Maior geração diária", f"{maior_dia['Energia_kWh']:.2f} kWh", delta=maior_dia['Dia_Data'].strftime('%d/%m/%Y'), delta_color="off")
+                    with kc:
+                        qtd_anomalias = int((df_diario_energia['Classificacao'] == 'Possível anomalia').sum())
+                        st.metric("Possíveis anomalias", str(qtd_anomalias))
+
+                    df_energia_plot = df_diario_energia.sort_values('Dia_Data')
+                    fig_energia_dias = px.bar(
+                        df_energia_plot,
+                        x='Dia_Data',
+                        y='Energia_kWh',
+                        color='Classificacao',
+                        title="Energia estimada por dia e classificação",
+                        color_discrete_map={
+                            'Dentro da referência': '#25A56A',
+                            'Possível anomalia': '#E74C3C',
+                            'Menor geração (sem ajuste por irradiância)': '#E67E22',
+                            'Sem referência suficiente': '#7F8C8D',
+                            'Sem irradiância suficiente': '#3498DB',
+                            'Dados incompletos': '#8E44AD'
                         }
                     )
                     fig_energia_dias.update_layout(
@@ -125,3 +861,6 @@
 
     else:
         st.info("Por favor, carregue a planilha de dados no menu lateral para iniciar o sistema.")
+
+if __name__ == "__main__":
+    main()
